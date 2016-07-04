@@ -1146,8 +1146,8 @@ class Pbh_combined(Pbh):
     def add_run(self, runNum):
         pbh_ = Pbh()
         pbh_.get_TreeWithAllGamma(runNum=runNum, nlines=None)
-        _sig_burst_hist, _sig_burst_dict = pbh.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
-        _avg_bkg_hist, _bkg_burst_dicts = pbh.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
+        _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
+        _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
                                                                method=self.bkg_method,copy=True, n_scramble=self.N_scramble,
                                                                return_burst_dict=True, verbose=self.verbose)
         pbh_.getRunSummary()
