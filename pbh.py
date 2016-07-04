@@ -1167,7 +1167,7 @@ class Pbh_combined(Pbh):
 
     def get_ULs(self):
         for b_ in self.burst_sizes_set:
-            minimum_rho_dot, minimum_ll, rho_dots, lls = pbh.get_minimum_ll(b_, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
+            minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
             self.minimum_lls[b_] = minimum_ll
             self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
         return self.rho_dot_ULs
