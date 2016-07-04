@@ -1201,21 +1201,46 @@ class Pbh_combined(Pbh):
             print("###############################################################################")
         return ll_
 
-    def get_ULs(self):
+    @autojit
+    def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
+                       verbose=False):
+        #search rho_dots for the minimum -2lnL
+        if not isinstance(rho_dots, np.ndarray):
+            rho_dots = np.asarray(rho_dots)
+        min_ll_ = 1.e5
+        rho_dot_min_ll_ = -1.0
+        if return_arrays:
+            lls_ = np.zeros(rho_dots.shape[0])
+        i=0
+        for rho_dot_ in rho_dots:
+            ll_ = self.get_ll(rho_dot_, burst_size, t_window, verbose=verbose)
+            if ll_ < min_ll_:
+                min_ll_ = ll_
+                rho_dot_min_ll_ = rho_dot_
+            if return_arrays:
+                lls_[i] = ll_
+                i += 1
+        if return_arrays:
+            return rho_dot_min_ll_, min_ll_, rho_dots, lls_
+        return rho_dot_min_ll_, min_ll_
+
+    def get_ULs(self, burst_size_threshold=2):
         for b_ in self.burst_sizes_set:
-            minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
-            self.minimum_lls[b_] = minimum_ll
-            self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
+            if b_ >= burst_size_threshold:
+                minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
+                self.minimum_lls[b_] = minimum_ll
+                self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
         return self.rho_dot_ULs
 
-    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True):
+    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True):
         rho_dots=self.rho_dots
         for b_ in self.burst_sizes_set:
             minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=rho_dots, verbose=self.verbose)
             plt.plot(rho_dots, lls-minimum_ll, label="burst size "+str(b_)+", "+str(self.window_size)+"-s window")
         #plt.axvline(x=minimum_rho_dot, color="b", ls="--",
         #            label=("minimum -2lnL = %.2f at rho_dot = %.1f " % (minimum_ll, minimum_rho_dot)))
-        plt.axhline(y=6.63, color="r", ls='--')
+        if plot_hline:
+            plt.axhline(y=6.63, color="r", ls='--')
         plt.xlabel(r"Rate density of PBH evaporation (pc$^{-3}$ yr$^{-1}$)")
         plt.ylabel(r"-2$\Delta$lnL")
         plt.legend(loc='best')
@@ -1242,6 +1267,10 @@ class Pbh_combined(Pbh):
                 self.runlist = self.runlist[np.where(self.runlist!=run_)]
         rho_dot_ULs = self.get_ULs()
         return rho_dot_ULs
+
+    def save(self, filename):
+        #save_hdf5(self, filename)
+        dump_pickle(self, filename)
 
 class powerlaw:
     # Class can calculate a power-law pdf, cdf from x_min to x_max,
