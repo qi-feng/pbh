@@ -1225,7 +1225,7 @@ class Pbh_combined(Pbh):
 
     def process_run_list(self, filename="pbh_runlist.txt"):
         runlist = pd.read_csv("pbh_runlist.txt")
-        runlist.columns = "runNum"
+        runlist.columns = ["runNum"]
         self.runlist = runlist.runNum.values
         for run_ in self.runlist:
             self.add_run(run_)
