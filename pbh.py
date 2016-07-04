@@ -1103,7 +1103,7 @@ class Pbh_combined(Pbh):
         self.N_scramble = 10
         self.verbose = False
         self.burst_sizes_set = set()
-        self.rho_dots = np.arange(1e3, 5.e5, 1000.)
+        self.rho_dots = np.arange(0, 2.e7, 1000.)
 
     def add_pbh(self, pbh):
         #When adding a new run, we want to update:
@@ -1152,6 +1152,11 @@ class Pbh_combined(Pbh):
             else:
                 self.effective_volumes[key_] = self.effective_volumes[key_] * previous_total_time_year + pbh.total_time_year * pbh.V_eff(key_, self.window_size)
 
+    #Override V_eff for the combiner class
+    def V_eff(self, burst_size, t_window, verbose=False):
+        assert t_window==self.window_size, "You are asking for an effective volume for a different window size."
+        return self.effective_volumes[burst_size]
+
     def get_all_burst_sizes(self):
         #returns a set, not a dict
         all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
@@ -1169,7 +1174,7 @@ class Pbh_combined(Pbh):
         self.add_pbh(pbh_)
         self.runNums.append(runNum)
 
-    #Redefine get_ll so that it knows where to find the effective volume
+    #Override get_ll so that it knows where to find the effective volume
     def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
         all_burst_sizes = self.get_all_burst_sizes()
@@ -1227,8 +1232,14 @@ class Pbh_combined(Pbh):
         runlist = pd.read_csv("pbh_runlist.txt")
         runlist.columns = ["runNum"]
         self.runlist = runlist.runNum.values
+        self.bad_runs = []
         for run_ in self.runlist:
-            self.add_run(run_)
+            try:
+                self.add_run(run_)
+            except:
+                print("Bad run: %d" % run_)
+                self.bad_runs.append(run_)
+                self.runlist = self.runlist[np.where(self.runlist!=run_)]
         rho_dot_ULs = self.get_ULs()
         return rho_dot_ULs
 
