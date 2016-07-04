@@ -1203,7 +1203,8 @@ class Pbh_combined(Pbh):
             self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
         return self.rho_dot_ULs
 
-    def plot_ll_vs_rho_dots(self, rho_dots=self.rho_dots, save_hist="ll_vs_rho_dots", xlog=True, grid=True):
+    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True):
+        rho_dots=self.rho_dots
         for b_ in self.burst_sizes_set:
             minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=rho_dots, verbose=self.verbose)
             plt.plot(rho_dots, lls-minimum_ll, label="burst size "+str(b_)+", "+str(self.window_size)+"-s window")
