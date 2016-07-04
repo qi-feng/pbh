@@ -453,7 +453,7 @@ class Pbh(object):
             slice_index = np.where((self.photon_df.ts >= t) & (self.photon_df.ts < (t + window_size)))
 
             #2. remove singlets
-            slice_index, singlet_slice_index = self.singlet_remover(np.array(slice_index[0]))
+            slice_index, singlet_slice_index = self.singlet_remover(np.array(slice_index[0]), verbose=verbose)
 
             if slice_index is None:
                 if verbose:
@@ -543,7 +543,7 @@ class Pbh(object):
         return burst_hist, self.burst_dict
 
     @autojit
-    def singlet_remover(self, slice_index):
+    def singlet_remover(self, slice_index, verbose=False):
         """
         :param slice_index: a np array of events' indices in photon_df
         :return: new slice_index with singlets (no neighbors in a radius of 5*psf) removed, and a slice of singlets;
@@ -581,8 +581,9 @@ class Pbh(object):
                         mask_[j] = True
                         continue
         ###QF
-        print("removed %d singlet" % sum(mask_==False))
-        print("%d good evts" % slice_index[mask_].shape[0])
+        if verbose:
+            print("removed %d singlet" % sum(mask_==False))
+            print("%d good evts" % slice_index[mask_].shape[0])
         return slice_index[mask_], slice_index[np.invert(mask_)]
 
     def search_event_slice(self, slice_index):
@@ -1087,7 +1088,10 @@ class Pbh_combined(Pbh):
         self.n_runs = 0
         #total exposure in unit of year
         self.total_time_year = 0
-        self.effective_volume = 0.0
+        #self.effective_volume = 0.0
+        self.effective_volumes = {}
+        self.minimum_lls = {}
+        self.rho_dot_ULs = {}
         #Make the class for a specific window size
         self.window_size = window_size
         #Some global parameters
@@ -1095,6 +1099,8 @@ class Pbh_combined(Pbh):
         self.rando_method = "cell"
         self.N_scramble = 10
         self.verbose = False
+        self.burst_sizes_set = set()
+        self.rho_dots = np.arange(1e3, 5.e5, 1000.)
 
     def add_pbh(self, pbh):
         #When adding a new run, we want to update:
@@ -1102,7 +1108,7 @@ class Pbh_combined(Pbh):
         # 2. self.total_time_year
         # 3. self.sig_burst_hist
         # 4. self.avg_bkg_hist
-        # 5. self.effective_volume
+        # 5. self.effective_volumes
         self.pbhs.append(pbh)
         # 1.
         previous_n_runs = self.n_runs
@@ -1115,6 +1121,7 @@ class Pbh_combined(Pbh):
         # 3 and 4 and residual
         current_all_burst_sizes = self.get_all_burst_sizes()
         new_all_burst_sizes = current_all_burst_sizes.union(set(k for dic in [pbh.sig_burst_hist, pbh.avg_bkg_hist] for k in dic.keys()))
+        self.burst_sizes_set = new_all_burst_sizes
         for key_ in new_all_burst_sizes:
             #first zero-pad the new pbh hists with all possible burst sizes
             key_ = int(key_)
@@ -1136,7 +1143,11 @@ class Pbh_combined(Pbh):
             self.residual_dict[key_] = self.sig_burst_hist[key_] - self.avg_bkg_hist[key_]
 
         # 5.
-        self.effective_volume = self.effective_volume * previous_total_time_year + pbh.total_time_year * pbh.V_eff()
+        for key_ in new_all_burst_sizes:
+            if key_ not in self.effective_volumes:
+                self.effective_volumes[key_] = pbh.total_time_year * pbh.V_eff(key_, self.window_size)
+            else:
+                self.effective_volumes[key_] = self.effective_volumes[key_] * previous_total_time_year + pbh.total_time_year * pbh.V_eff(key_, self.window_size)
 
     def get_all_burst_sizes(self):
         #returns a set, not a dict
@@ -1153,6 +1164,13 @@ class Pbh_combined(Pbh):
         pbh_.getRunSummary()
         self.add_pbh(pbh_)
         self.runNums.append(runNum)
+
+    def get_ULs(self):
+        for b_ in self.burst_sizes_set:
+            minimum_rho_dot, minimum_ll, rho_dots, lls = pbh.get_minimum_ll(b_, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
+            self.minimum_lls[b_] = minimum_ll
+            self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
+        return self.rho_dot_ULs
 
 class powerlaw:
     # Class can calculate a power-law pdf, cdf from x_min to x_max,
