@@ -19,7 +19,7 @@ try:
     import ROOT
     ROOT.PyConfig.StartGuiThread = False
 except:
-    print "Can't import ROOT, no related functionality possible"
+    print("Can't import ROOT, no related functionality possible")
 
 import time
 
@@ -196,7 +196,7 @@ class Pbh(object):
 
     def scramble(self, copy=False):
         if not hasattr(self, 'photon_df'):
-            print "Call get_TreeWithAllGamma first..."
+            print("Call get_TreeWithAllGamma first...")
         if copy:
             # if you want to keep the original burst_dict, this should only happen at the 1st scramble
             if not hasattr(self, 'photon_df_orig'):
@@ -218,7 +218,7 @@ class Pbh(object):
         use 1/delta_t as the expected Poisson rate for each event
         """
         if not hasattr(self, 'photon_df'):
-            print "Call get_TreeWithAllGamma first..."
+            print("Call get_TreeWithAllGamma first...")
         if copy:
             # if you want to keep the original burst_dict, this should only happen at the 1st scramble
             if not hasattr(self, 'photon_df_orig'):
@@ -242,8 +242,8 @@ class Pbh(object):
                 _rando_delta_t = np.random.exponential(rate_expected)
                 inf_loop_preventer += 1
                 if inf_loop_preventer > inf_loop_bound:
-                    print "Tried 100 times and can't draw a rando wait time that's larger than VERITAS deadtime,"
-                    print "you'd better check your time unit or something..."
+                    print("Tried 100 times and can't draw a rando wait time that's larger than VERITAS deadtime,")
+                    print("you'd better check your time unit or something...")
             self.photon_df.at[i + 1, 'ts'] = self.photon_df.ts[i] + _rando_delta_t
         #naturally sorted
         # re-init _burst_dict for counting
@@ -281,9 +281,9 @@ class Pbh(object):
         :return: nothing but filles photon_df.psfs, a number that is repeatedly used later
         """
         if not hasattr(self, 'photon_df'):
-            print "Call get_TreeWithAllGamma first..."
+            print("Call get_TreeWithAllGamma first...")
         ###QF:
-        print "getting psf"
+        print("getting psf")
         for i, EL_ in enumerate(self.photon_df.ELs.values):
             #self.photon_df.psfs.at[i] = self.get_psf(E=self.photon_df.loc[i, 'Es'], EL=EL_)
             self.photon_df.at[i, 'psfs'] = self.get_psf(E=self.photon_df.at[i, 'Es'], EL=EL_)
@@ -425,7 +425,7 @@ class Pbh(object):
         assert hasattr(self,
                        'photon_df'), "photon_df doesn't exist, read data first (read_photon_list or get_TreeWithAllGamma)"
         if len(self._burst_dict) != 0:
-            print "You started a burst search while there are already things in _burst_dict, now make it empty"
+            print("You started a burst search while there are already things in _burst_dict, now make it empty")
             self._burst_dict = {}
         previous_window_start = -1.0
         previous_window_end = -1.0
@@ -879,13 +879,13 @@ class Pbh(object):
             print("###############################################################################")
         return ll_
 
-    def get_ll_vs_rho_dot(self, burst_size, t_window, rho_dots=np.arange(1e5, 2.e6, 100), verbose=False):
+    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(1e5, 2.e6, 100), verbose=False):
         #plot a vertical slice of Fig 8-4, for a given burst size and search window, scan through rho_dot and plot -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
         lls_ = np.zeros(rho_dots.shape[0])
         for i, rho_dot_ in enumerate(rho_dots):
-            lls_[i] = self.get_ll(rho_dot_, burst_size, t_window, verbose=verbose)
+            lls_[i] = self.get_ll(rho_dot_, burst_size_thresh, t_window, verbose=verbose)
         return rho_dots, lls_
 
     @autojit
@@ -912,6 +912,9 @@ class Pbh(object):
         return rho_dot_min_ll_, min_ll_
 
     def get_ul_rho_dot(self, rho_dots, lls_, min_ll_):
+        """
+        # lls_ is the **SUM** of -2lnL from *ALL* burst sizes
+        """
         ll_99 = 6.63
         ul_99_idx = (np.abs(lls_-min_ll_-ll_99)).argmin()
         ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<1e-9)
@@ -1199,6 +1202,34 @@ class Pbh_combined(Pbh):
             self.minimum_lls[b_] = minimum_ll
             self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
         return self.rho_dot_ULs
+
+    def plot_ll_vs_rho_dots(self, rho_dots=self.rho_dots, save_hist="ll_vs_rho_dots", xlog=True, grid=True):
+        for b_ in self.burst_sizes_set:
+            minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=rho_dots, verbose=self.verbose)
+            plt.plot(rho_dots, lls-minimum_ll, label="burst size "+str(b_)+", "+str(self.window_size)+"-s window")
+        #plt.axvline(x=minimum_rho_dot, color="b", ls="--",
+        #            label=("minimum -2lnL = %.2f at rho_dot = %.1f " % (minimum_ll, minimum_rho_dot)))
+        plt.axhline(y=6.63, color="r", ls='--')
+        plt.xlabel(r"Rate density of PBH evaporation (pc$^{-3}$ yr$^{-1}$)")
+        plt.ylabel(r"-2$\Delta$lnL")
+        plt.legend(loc='best')
+        if xlog:
+            plt.xscale('log')
+        if grid:
+            plt.grid(b=True)
+        filename=save_hist+"_"+str(self.n_runs)+"runs.png"
+        plt.savefig(filename, dpi=150)
+        plt.show()
+        print("Done!")
+
+    def process_run_list(self, filename="pbh_runlist.txt"):
+        runlist = pd.read_csv("pbh_runlist.txt")
+        runlist.columns = "runNum"
+        self.runlist = runlist.runNum.values
+        for run_ in self.runlist:
+            self.add_run(run_)
+        rho_dot_ULs = self.get_ULs()
+        return rho_dot_ULs
 
 class powerlaw:
     # Class can calculate a power-law pdf, cdf from x_min to x_max,
