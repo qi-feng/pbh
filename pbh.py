@@ -1156,6 +1156,7 @@ class Pbh_combined(Pbh):
 
     def add_run(self, runNum):
         pbh_ = Pbh()
+        pbh_.readEDfile(runNum=runNum)
         pbh_.get_TreeWithAllGamma(runNum=runNum, nlines=None)
         _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
         _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
@@ -1164,6 +1165,33 @@ class Pbh_combined(Pbh):
         pbh_.getRunSummary()
         self.add_pbh(pbh_)
         self.runNums.append(runNum)
+
+    #Redefine get_ll so that it knows where to find the effective volume
+    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
+        #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
+        all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+        ll_ = 0.0
+        for burst_size in all_burst_sizes:
+            if burst_size >= burst_size_threshold:
+                #Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
+                Veff_ = self.effective_volumes[burst_size]
+                n_expected_ = self.n_excess(rho_dot, Veff_, verbose=verbose)
+                if burst_size not in self.sig_burst_hist:
+                    self.sig_burst_hist[burst_size] = 0
+                if burst_size not in self.avg_bkg_hist:
+                    self.avg_bkg_hist[burst_size] = 0
+                n_on_ = self.sig_burst_hist[burst_size]
+                n_off_ = self.avg_bkg_hist[burst_size]
+                ll_ += self.ll(n_on_, n_off_, n_expected_)
+                if verbose:
+                    #print("###############################################################################")
+                    print("Adding -2lnL at burst size %d, for search window %.1f and rate density %.1f, so far -2lnL = %.2f" % (burst_size, t_window, rho_dot, ll_))
+                    #print("###############################################################################")
+        if verbose:
+            print("###############################################################################")
+            print("-2lnL above burst size %d, for search window %.1f and rate density %.1f is %.2f" % (burst_size_threshold, t_window, rho_dot, ll_))
+            print("###############################################################################")
+        return ll_
 
     def get_ULs(self):
         for b_ in self.burst_sizes_set:
