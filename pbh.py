@@ -664,7 +664,7 @@ class Pbh(object):
         self.burst_dict = self._burst_dict.copy()
         return self.burst_dict
 
-    @autojit
+    #@autojit
     def burst_counting(self):
         """
         :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
