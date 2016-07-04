@@ -84,9 +84,9 @@ class Pbh(object):
 
         self.get_psf_lists()
 
-    def readEDfile(self, runNum=None, filename=None):
+    def readEDfile(self, runNum=None, filename=None, dir="data"):
         self.runNum = runNum
-        self.filename = str(runNum) + ".anasum.root"
+        self.filename = str(dir)+"/"+str(runNum) + ".anasum.root"
         if not os.path.isfile(self.filename) and filename is not None:
             if os.path.isfile(filename):
                 self.filename = filename
