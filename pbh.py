@@ -914,7 +914,7 @@ class Pbh(object):
     def get_ul_rho_dot(self, rho_dots, lls_, min_ll_):
         ll_99 = 6.63
         ul_99_idx = (np.abs(lls_-min_ll_-ll_99)).argmin()
-        ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<1e-5)
+        ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<1e-9)
         if ul_99_idx_all[0].shape[0]==0:
             print("Can't find 99% UL!")
             raise
@@ -1169,7 +1169,7 @@ class Pbh_combined(Pbh):
     #Redefine get_ll so that it knows where to find the effective volume
     def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
-        all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+        all_burst_sizes = self.get_all_burst_sizes()
         ll_ = 0.0
         for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
