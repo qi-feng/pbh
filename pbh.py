@@ -1111,13 +1111,14 @@ class Pbh_combined(Pbh):
         self.sig_burst_hist = {}
         self.avg_bkg_hist = {}
         self.residual_dict = {}
+        self.total_time_year = 0
         self.effective_volumes = {}
         self.minimum_lls = {}
         self.rho_dot_ULs = {}
         self.burst_sizes_set = set()
         #analyze again:
         for pbh_ in self.pbhs:
-            self.do_step345(pbh_)
+            self.do_step2345(pbh_)
         rho_dot_ULs = self.get_ULs()
         return rho_dot_ULs
 
@@ -1133,14 +1134,14 @@ class Pbh_combined(Pbh):
         # 1.
         previous_n_runs = self.n_runs
         self.n_runs += 1
+        self.do_step2345(pbh)
+
+    def do_step2345(self, pbh):
         # 2.
         if not hasattr(pbh, 'total_time_year'):
             pbh.total_time_year = (pbh.tOn*(1.-pbh.DeadTimeFracOn))/31536000.
         previous_total_time_year = self.total_time_year
         self.total_time_year += pbh.total_time_year
-        self.do_step345(pbh)
-
-    def do_step345(self, pbh):
         # 3 and 4 and residual
         current_all_burst_sizes = self.get_all_burst_sizes()
         new_all_burst_sizes = current_all_burst_sizes.union(set(k for dic in [pbh.sig_burst_hist, pbh.avg_bkg_hist] for k in dic.keys()))
