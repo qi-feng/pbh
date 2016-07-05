@@ -1103,7 +1103,24 @@ class Pbh_combined(Pbh):
         self.N_scramble = 10
         self.verbose = False
         self.burst_sizes_set = set()
-        self.rho_dots = np.arange(0, 2.e7, 1000.)
+        self.rho_dots = np.arange(0, 2.e9, 1.e5)
+
+    def change_window_size(self, window_size):
+        self.window_size = window_size
+        #a bunch of stuff needs re-initialization
+        self.sig_burst_hist = {}
+        self.avg_bkg_hist = {}
+        self.residual_dict = {}
+        self.effective_volumes = {}
+        self.minimum_lls = {}
+        self.rho_dot_ULs = {}
+        self.burst_sizes_set = set()
+        #analyze again:
+        for pbh_ in self.pbhs:
+            self.do_step345(pbh_)
+        rho_dot_ULs = self.get_ULs()
+        return rho_dot_ULs
+
 
     def add_pbh(self, pbh):
         #When adding a new run, we want to update:
@@ -1121,6 +1138,9 @@ class Pbh_combined(Pbh):
             pbh.total_time_year = (pbh.tOn*(1.-pbh.DeadTimeFracOn))/31536000.
         previous_total_time_year = self.total_time_year
         self.total_time_year += pbh.total_time_year
+        self.do_step345(pbh)
+
+    def do_step345(self, pbh):
         # 3 and 4 and residual
         current_all_burst_sizes = self.get_all_burst_sizes()
         new_all_burst_sizes = current_all_burst_sizes.union(set(k for dic in [pbh.sig_burst_hist, pbh.avg_bkg_hist] for k in dic.keys()))
@@ -1225,15 +1245,16 @@ class Pbh_combined(Pbh):
         return rho_dot_min_ll_, min_ll_
 
     def get_ULs(self, burst_size_threshold=2):
-        for b_ in self.burst_sizes_set:
-            if b_ >= burst_size_threshold:
-                minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
-                self.minimum_lls[b_] = minimum_ll
-                self.rho_dot_ULs[b_], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
+        print("Getting UL for burst size above %d..." % burst_size_threshold)
+        minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(burst_size_threshold, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
+        self.minimum_lls[burst_size_threshold] = minimum_ll
+        self.rho_dot_ULs[burst_size_threshold], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
         return self.rho_dot_ULs
 
     def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True):
         rho_dots=self.rho_dots
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
         for b_ in self.burst_sizes_set:
             minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=rho_dots, verbose=self.verbose)
             plt.plot(rho_dots, lls-minimum_ll, label="burst size "+str(b_)+", "+str(self.window_size)+"-s window")
@@ -1261,8 +1282,9 @@ class Pbh_combined(Pbh):
         for run_ in self.runlist:
             try:
                 self.add_run(run_)
+                print("Run %d processed." % run_)
             except:
-                print("Bad run: %d" % run_)
+                print("*** Bad run: %d ***" % run_)
                 self.bad_runs.append(run_)
                 self.runlist = self.runlist[np.where(self.runlist!=run_)]
         rho_dot_ULs = self.get_ULs()
