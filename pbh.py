@@ -49,6 +49,7 @@ class Pbh(object):
         # self.E_bins=np.digitize(self.BDT_ErecS, self.E_grid)-1
         #self.Z_bins=np.digitize((90.-self.BDT_Elevation), self.Zen_grid)-1
         #  0.08 to 0.32 TeV
+        #  the 3 elements are Elevation 50-70, 70-80 80-90 degs
         self.psf_lookup[0, :] = np.array([0.052, 0.051, 0.05])
         #  0.32 to 0.5 TeV
         self.psf_lookup[1, :] = np.array([0.047, 0.042, 0.042])
@@ -824,7 +825,9 @@ class Pbh(object):
         #eq 8.8, or maybe more appropriately call it n_expected
         if not hasattr(self, 'total_time_year'):
             self.total_time_year = (self.tOn*(1.-self.DeadTimeFracOn))/31536000.
-        n_ex = 1.0 * rho_dot * self.total_time_year * Veff
+        #n_ex = 1.0 * rho_dot * self.total_time_year * Veff
+        # because the burst likelihood cut -9.5 is at 90% CL
+        n_ex = 0.9 * rho_dot * self.total_time_year * Veff
         if verbose:
             print("The value of the expected number of bursts (eq 8.9) is %.2f" % n_ex)
         return n_ex
@@ -1280,7 +1283,7 @@ class Pbh_combined(Pbh):
         print("Done!")
 
     def process_run_list(self, filename="pbh_runlist.txt"):
-        runlist = pd.read_csv("pbh_runlist.txt")
+        runlist = pd.read_csv(filename)
         runlist.columns = ["runNum"]
         self.runlist = runlist.runNum.values
         self.bad_runs = []
