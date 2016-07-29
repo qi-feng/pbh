@@ -1177,7 +1177,9 @@ class Pbh_combined(Pbh):
         for key_ in new_all_burst_sizes:
             if key_ not in self.effective_volumes:
                 #self.effective_volumes[key_] = pbh.total_time_year * pbh.V_eff(key_, self.window_size)
-                self.effective_volumes[key_] = pbh.V_eff(key_, self.window_size)
+                self.effective_volumes[key_] = self.V_eff(key_, self.window_size)
+            elif key_ not in pbh.effective_volumes:
+                pbh.effective_volumes[key_] = pbh.V_eff(key_, self.window_size)
             else:
                 new_total_time = 1.0 * (previous_total_time_year + pbh.total_time_year)
                 self.effective_volumes[key_] = (self.effective_volumes[key_] * previous_total_time_year + pbh.total_time_year * pbh.V_eff(key_, self.window_size)) / new_total_time
@@ -1343,6 +1345,34 @@ class powerlaw:
     def random(self, n):
         r_uniform = np.random.random_sample(n)
         return self.ppf(r_uniform)
+
+def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0, 2e7, 1e4), burst_size_thresh=2, filename="ll_vs_rho_dots.png",
+                            label_names=None, xlog=True, grid=True, plot_hline=True):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    if label_names is not None:
+        assert len(pbhs_list)==len(label_names), "Check the length of label_names, doesn't match pbhs_list"
+    for i, p in enumerate(pbhs_list):
+        if label_names is not None:
+            label_name =  label_names[i]+" burst size "+str(burst_size_thresh)+", "+str(p.window_size)+"-s window"
+        else:
+            label_name =  "burst size "+str(burst_size_thresh)+", "+str(p.window_size)+"-s window"
+        minimum_rho_dot, minimum_ll, rho_dots, lls = p.get_minimum_ll(burst_size_thresh, p.window_size, rho_dots=rho_dots, verbose=p.verbose)
+        plt.plot(rho_dots, lls-minimum_ll, label=label_name)
+    #plt.axvline(x=minimum_rho_dot, color="b", ls="--",
+    #            label=("minimum -2lnL = %.2f at rho_dot = %.1f " % (minimum_ll, minimum_rho_dot)))
+    if plot_hline:
+        plt.axhline(y=6.63, color="r", ls='--')
+    plt.xlabel(r"Rate density of PBH evaporation (pc$^{-3}$ yr$^{-1}$)")
+    plt.ylabel(r"-2$\Delta$lnL")
+    plt.legend(loc='best')
+    if xlog:
+        plt.xscale('log')
+    if grid:
+        plt.grid(b=True)
+    plt.savefig(filename, dpi=150)
+    plt.show()
+    print("Done!")
 
 
 def test_psf_func(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
