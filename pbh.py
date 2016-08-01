@@ -1184,6 +1184,7 @@ class Pbh_combined(Pbh):
             #if key_ not in pbh.effective_volumes:
             #    pbh.effective_volumes[key_] = pbh.V_eff(key_, self.window_size)
 
+        assert self.burst_sizes_set==self.get_all_burst_sizes(), "Something is wrong when adding a pbh to pbh combined"
 
     #Override V_eff for the combiner class
     def V_eff(self, burst_size, t_window, verbose=False):
@@ -1215,6 +1216,7 @@ class Pbh_combined(Pbh):
         for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
                 #Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
+                print("Burst size %d " % burst_size)
                 Veff_ = self.effective_volumes[burst_size]
                 n_expected_ = self.n_excess(rho_dot, Veff_, verbose=verbose)
                 if burst_size not in self.sig_burst_hist:
