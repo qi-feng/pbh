@@ -1300,6 +1300,7 @@ class Pbh_combined(Pbh):
                 print("Run %d processed." % run_)
             except:
                 print("*** Bad run: %d ***" % run_)
+                raise
                 self.bad_runs.append(run_)
                 self.runlist = self.runlist[np.where(self.runlist!=run_)]
         rho_dot_ULs = self.get_ULs()
