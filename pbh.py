@@ -1177,7 +1177,13 @@ class Pbh_combined(Pbh):
         for key_ in new_all_burst_sizes:
             if key_ not in self.effective_volumes:
                 #self.effective_volumes[key_] = pbh.total_time_year * pbh.V_eff(key_, self.window_size)
-                self.effective_volumes[key_] = self.V_eff(key_, self.window_size)
+                #self.effective_volumes[key_] = self.V_eff(key_, self.window_size)
+                self.effective_volumes[key_] = 0.0
+                for pbh_ in self.pbhs:
+                    Veff_ = pbh_.V_eff(key_, self.window_size, verbose=False)
+                    self.effective_volumes[key_] += pbh_.total_time_year * Veff_ * 1.0
+                new_total_time = 1.0 * (previous_total_time_year + pbh.total_time_year)
+                self.effective_volumes[key_] = self.effective_volumes[key_]/new_total_time
             else:
                 new_total_time = 1.0 * (previous_total_time_year + pbh.total_time_year)
                 self.effective_volumes[key_] = (self.effective_volumes[key_] * previous_total_time_year + pbh.total_time_year * pbh.V_eff(key_, self.window_size)) / new_total_time
