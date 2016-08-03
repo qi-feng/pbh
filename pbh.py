@@ -36,6 +36,7 @@ def rad2deg(rad):
     return rad * 180. / np.pi
 
 class Pbh(object):
+    # Class for one run
     def __init__(self):
         # the cut on -2lnL, consider smaller values accepted for events coming from the same centroid
         self.ll_cut = -9.5
@@ -59,6 +60,7 @@ class Pbh(object):
         self.psf_lookup[3, :] = np.array([0.031, 0.028, 0.027])
         self._burst_dict = {}  #{"Burst #": [event # in this burst]}, for internal use
         self.VERITAS_deadtime = 0.33e-3  # 0.33ms
+        self.runNum = 0
 
     def read_photon_list(self, ts, RAs, Decs, Es, ELs):
         N_ = len(ts)
@@ -1142,6 +1144,7 @@ class Pbh_combined(Pbh):
         previous_n_runs = self.n_runs
         self.n_runs += 1
         self.do_step2345(pbh)
+        self.runNums.append(pbh.runNum)
 
     def do_step2345(self, pbh):
         # 2.
@@ -1212,7 +1215,7 @@ class Pbh_combined(Pbh):
                                                                return_burst_dict=True, verbose=self.verbose)
         pbh_.getRunSummary()
         self.add_pbh(pbh_)
-        self.runNums.append(runNum)
+        #self.runNums.append(runNum)
 
     #Override get_ll so that it knows where to find the effective volume
     def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
@@ -1296,7 +1299,7 @@ class Pbh_combined(Pbh):
         print("Done!")
 
     def process_run_list(self, filename="pbh_runlist.txt"):
-        runlist = pd.read_csv(filename)
+        runlist = pd.read_csv(filename, header=None)
         runlist.columns = ["runNum"]
         self.runlist = runlist.runNum.values
         self.bad_runs = []
@@ -1306,7 +1309,7 @@ class Pbh_combined(Pbh):
                 print("Run %d processed." % run_)
             except:
                 print("*** Bad run: %d ***" % run_)
-                raise
+                #raise
                 self.bad_runs.append(run_)
                 self.runlist = self.runlist[np.where(self.runlist!=run_)]
         rho_dot_ULs = self.get_ULs()
