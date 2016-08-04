@@ -1184,11 +1184,13 @@ class Pbh_combined(Pbh):
                 #self.effective_volumes[key_] = self.V_eff(key_, self.window_size)
                 self.effective_volumes[key_] = 0.0
                 for pbh_ in self.pbhs:
+                    #This already includes the new pbh object
                     Veff_ = pbh_.V_eff(key_, self.window_size, verbose=False)
                     self.effective_volumes[key_] += pbh_.total_time_year * Veff_ * 1.0
                 new_total_time = 1.0 * (previous_total_time_year + pbh.total_time_year)
                 self.effective_volumes[key_] = self.effective_volumes[key_]/new_total_time
             else:
+                #self.effective_volumes[key_] already exists, so don't need to calculate again, this is faster
                 new_total_time = 1.0 * (previous_total_time_year + pbh.total_time_year)
                 self.effective_volumes[key_] = (self.effective_volumes[key_] * previous_total_time_year + pbh.total_time_year * pbh.V_eff(key_, self.window_size)) / new_total_time
             #if key_ not in pbh.effective_volumes:
@@ -1199,6 +1201,15 @@ class Pbh_combined(Pbh):
     #Override V_eff for the combiner class
     def V_eff(self, burst_size, t_window, verbose=False):
         assert t_window==self.window_size, "You are asking for an effective volume for a different window size."
+        if burst_size not in self.effective_volumes:
+            #recalculate effective volume from each single pbh class in the combiner
+            self.effective_volumes[burst_size] = 0.0
+            total_time = 0.0
+            for pbh_ in self.pbhs:
+                Veff_ = pbh_.V_eff(burst_size, self.window_size, verbose=False)
+                self.effective_volumes[burst_size] += pbh_.total_time_year * Veff_ * 1.0
+                total_time += pbh_.total_time_year
+            self.effective_volumes[burst_size] = self.effective_volumes[burst_size]/total_time * 1.0
         return self.effective_volumes[burst_size]
 
     def get_all_burst_sizes(self):
@@ -1722,6 +1733,20 @@ def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=Fals
         pbhs.plot_burst_hist(filename="burst_hists_run"+str(run)+"_window"+str(window_size)+"-s.png",
                              title="Burst histogram run"+str(run)+""+str(window_size)+"-s window ", plt_log=True, error="Poisson")
 
+def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
+    list_df = pd.read_csv(list_of_pbhs_pickle, header=None)
+    list_df.columns = ["pickle_file"]
+    list_of_pbhs = list_df.pickle_file.values
+    first_pbh = load_pickle(list_of_pbhs[0])
+    window_size = first_pbh.window_size
+    pbhs_combined = Pbh_combined(window_size)
+    pbhs_combined.rho_dots=first_pbh.rho_dots
+    for pbhs_pkl_ in list_of_pbhs:
+        pbhs_ = load_pickle(pbhs_pkl_)
+        assert window_size==pbhs_.window_size, "The input list contains pbhs objects with different window sizes!"
+        pbhs_combined.add_pbh(pbhs_)
+    dump_pickle(pbhs_combined, outfile+"_window"+str(window_size)+"-s_"+str(list_of_pbhs.shape[0])+"runs.pkl")
+    return pbhs_combined
 
 def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, overwrite=True):
     print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
