@@ -1754,8 +1754,8 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.ara
             script.close()
             isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             print(isend_command)
-            #os.system(isend_command)
-            print("Run %d processed." % run_num)
+            os.system(isend_command)
+            print("Run %d sent to queue." % run_num)
         except:
             print("*** Can't process run: %d ***" % run_num)
             raise
