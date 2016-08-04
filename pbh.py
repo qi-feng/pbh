@@ -1724,7 +1724,7 @@ def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=Fals
 
 
 def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.arange(0, 2e7, 1e4), plot=False, overwrite=True):
-    print('Submitting a job for run %d with search window size %.1f'%(run_num, window_size))
+    print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     script_dir = '/raid/reedbuck/qfeng/pbh/'
 
@@ -1774,7 +1774,7 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     if options.runlist is not None:
-        print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
+        #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
         qsub_job_runlist(filename=options.runlist, window_size=options.window, rho_dots=options.rho_dots, plot=options.plot, overwrite=True)
 
     if options.run is not None:
