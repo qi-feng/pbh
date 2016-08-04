@@ -1764,8 +1764,8 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.ara
 
 if __name__ == "__main__":
     parser = OptionParser()
-    parser.add_option("-r","--run",dest="run", default=None)
-    parser.add_option("-w","--window",dest="window",default=10)
+    parser.add_option("-r","--run",dest="run", type="int", default=None)
+    parser.add_option("-w","--window",dest="window", type="float", default=10)
     parser.add_option("-p","--plot",dest="plot",default=False)
     parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
