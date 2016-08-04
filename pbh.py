@@ -1773,7 +1773,7 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     if options.run is not None:
-        print('Processing run %d with search window size %.1f'%(run_num, window_size))
+        print('Processing run %d with search window size %.1f'%(options.run, options.window))
         process_one_run(options.run, options.window, rho_dots=options.rho_dots, plot=options.plot)
 
     #test_singlet_remover()
