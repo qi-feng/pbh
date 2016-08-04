@@ -1723,7 +1723,7 @@ def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=Fals
                              title="Burst histogram run"+str(run)+""+str(window_size)+"-s window ", plt_log=True, error="Poisson")
 
 
-def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.arange(0, 2e7, 1e4), plot=False, overwrite=True):
+def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, overwrite=True):
     print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     script_dir = '/raid/reedbuck/qfeng/pbh/'
@@ -1750,7 +1750,10 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.ara
                 script.write('#PBS -l walltime=24:00:00\n')
                 script.write('#PBS -l pvmem=5gb\n')
                 script.write('cd %s\n'%script_dir)
-                script.write('python %s -r %d -w %d >> %s\n'%(pyscriptname, run_num, window_size, logfilename))
+                if plot:
+                    script.write('python %s -r %d -w %d -p >> %s\n'%(pyscriptname, run_num, window_size, logfilename))
+                else:
+                    script.write('python %s -r %d -w %d >> %s\n'%(pyscriptname, run_num, window_size, logfilename))
             script.close()
             isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             print(isend_command)
@@ -1768,18 +1771,18 @@ if __name__ == "__main__":
     parser.add_option("-w","--window",dest="window", type="float", default=10)
     #parser.add_option("-p","--plot",dest="plot",default=False)
     parser.add_option("-p","--plot", action="store_true", dest="plot", default=False)
-    parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
+    #parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
 
     if options.runlist is not None:
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
-        qsub_job_runlist(filename=options.runlist, window_size=options.window, rho_dots=options.rho_dots, plot=options.plot, overwrite=True)
+        qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot, overwrite=True)
 
     if options.run is not None:
         print('\n\n#########################################')
         print('Processing run %d with search window size %.1f'%(options.run, options.window))
-        process_one_run(options.run, options.window, rho_dots=options.rho_dots, plot=options.plot)
+        process_one_run(options.run, options.window, plot=options.plot)
 
     #test_singlet_remover()
     #pbh = test_burst_finding(window_size=5, runNum=55480, nlines=None, N_scramble=5,
