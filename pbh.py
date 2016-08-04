@@ -1030,7 +1030,7 @@ class Pbh(object):
         #plt.yscale('log')
         plt.legend(loc='best')
         if filename is not None:
-            plt.savefig(filename)
+            plt.savefig(filename, dpi=300)
         else:
             plt.show()
 
@@ -1719,7 +1719,7 @@ def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=Fals
     dump_pickle(pbhs, "pbhs_run"+str(run)+"_window"+str(window_size)+"-s.pkl")
     if plot:
         pbhs.plot_ll_vs_rho_dots(save_hist="ll_vs_rho_dots_run"+str(run)+"_window"+str(window_size)+"-s")
-        pbhs.plot_burst_hist(filename="burst_hists_run"+str(run)+"_window"+str(window_size)+"-s",
+        pbhs.plot_burst_hist(filename="burst_hists_run"+str(run)+"_window"+str(window_size)+"-s.png",
                              title="Burst histogram run"+str(run)+""+str(window_size)+"-s window ", plt_log=True, error="Poisson")
 
 
@@ -1766,12 +1766,14 @@ if __name__ == "__main__":
     parser = OptionParser()
     parser.add_option("-r","--run",dest="run", type="int", default=None)
     parser.add_option("-w","--window",dest="window", type="float", default=10)
-    parser.add_option("-p","--plot",dest="plot",default=False)
+    #parser.add_option("-p","--plot",dest="plot",default=False)
+    parser.add_option("-p","--plot", action="store_true", dest="plot", default=False)
     parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
 
     if options.run is not None:
+        print('Processing run %d with search window size %.1f'%(run_num, window_size))
         process_one_run(options.run, options.window, rho_dots=options.rho_dots, plot=options.plot)
 
     #test_singlet_remover()
