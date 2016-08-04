@@ -1773,7 +1773,7 @@ if __name__ == "__main__":
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
 
-    if options.run is not None:
+    if options.runlist is not None:
         print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
         qsub_job_runlist(filename=options.runlist, window_size=options.window, rho_dots=options.rho_dots, plot=options.plot, overwrite=True)
 
