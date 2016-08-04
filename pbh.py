@@ -1764,6 +1764,7 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.ara
 
 if __name__ == "__main__":
     parser = OptionParser()
+    parser.add_option("-l","--list",dest="runlist", default=None)
     parser.add_option("-r","--run",dest="run", type="int", default=None)
     parser.add_option("-w","--window",dest="window", type="float", default=10)
     #parser.add_option("-p","--plot",dest="plot",default=False)
@@ -1773,6 +1774,10 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     if options.run is not None:
+        qsub_job_runlist(filename=options.runlist, window_size=options.window, rho_dots=options.rho_dots, plot=options.plot, overwrite=True)
+
+    if options.run is not None:
+        print('\n\n#########################################')
         print('Processing run %d with search window size %.1f'%(options.run, options.window))
         process_one_run(options.run, options.window, rho_dots=options.rho_dots, plot=options.plot)
 
