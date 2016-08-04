@@ -1742,7 +1742,6 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.ara
                 if not overwrite:
                     sys.exit(1)
                 print('Overwriting...')
-            cvsname = 'trace_%d_%d.dat'%(run_num, itel)
             logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
             #script = open(scriptfullname, 'w')
             with open(scriptfullname, 'w') as script:
