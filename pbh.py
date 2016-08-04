@@ -10,6 +10,7 @@ import cPickle as pickle
 from scipy.special import gamma
 from math import factorial
 import tables
+from optparse import OptionParser
 
 import sys
 
@@ -1225,7 +1226,7 @@ class Pbh_combined(Pbh):
         for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
                 #Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
-                print("Burst size %d " % burst_size)
+                #print("Burst size %d " % burst_size)
                 Veff_ = self.effective_volumes[burst_size]
                 n_expected_ = self.n_excess(rho_dot, Veff_, verbose=verbose)
                 if burst_size not in self.sig_burst_hist:
@@ -1275,7 +1276,7 @@ class Pbh_combined(Pbh):
         self.rho_dot_ULs[burst_size_threshold], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
         return self.rho_dot_ULs
 
-    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True):
+    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True, show=False):
         rho_dots=self.rho_dots
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -1294,8 +1295,9 @@ class Pbh_combined(Pbh):
         if grid:
             plt.grid(b=True)
         filename=save_hist+"_"+str(self.n_runs)+"runs.png"
-        plt.savefig(filename, dpi=150)
-        plt.show()
+        plt.savefig(filename, dpi=300)
+        if show:
+            plt.show()
         print("Done!")
 
     def process_run_list(self, filename="pbh_runlist.txt"):
@@ -1360,7 +1362,7 @@ class powerlaw:
         return self.ppf(r_uniform)
 
 def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0, 2e7, 1e4), burst_size_thresh=2, filename="ll_vs_rho_dots.png",
-                            label_names=None, xlog=True, grid=True, plot_hline=True):
+                            label_names=None, xlog=True, grid=True, plot_hline=True, show=False):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     if label_names is not None:
@@ -1383,8 +1385,9 @@ def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0, 2e7, 1e4), burst_si
         plt.xscale('log')
     if grid:
         plt.grid(b=True)
-    plt.savefig(filename, dpi=150)
-    plt.show()
+    plt.savefig(filename, dpi=300)
+    if show:
+        plt.show()
     print("Done!")
 
 
@@ -1671,14 +1674,112 @@ def test2():
     print(pbh.photon_df.head())
     return pbh
 
+def comp_pbhs(pbhs1, pbhs2):
+    if pbhs1.total_time_year==pbhs2.total_time_year:
+        print("Same total time")
+    else:
+        print("*** Different total time! ***")
+    if pbhs1.effective_volumes==pbhs2.effective_volumes:
+        print("Same effective volumes")
+    else:
+        print("*** Different effective volumes! ***")
+    if pbhs1.get_all_burst_sizes()==pbhs2.get_all_burst_sizes():
+        print("Same burst sizes")
+    else:
+        print("*** Different burst sizes! ***")
+    if pbhs1.sig_burst_hist==pbhs2.sig_burst_hist:
+        print("Same sig_burst_hist")
+    else:
+        print("*** Different sig_burst_hist! ***")
+        print pbhs1.sig_burst_hist, pbhs2.sig_burst_hist
+    if pbhs1.avg_bkg_hist==pbhs2.avg_bkg_hist:
+        print("Same avg_bkg_hist")
+    else:
+        print("*** Different avg_bkg_hist! ***")
+        print pbhs1.avg_bkg_hist, pbhs2.avg_bkg_hist
+    if pbhs1.window_size==pbhs2.window_size:
+        print("Same window_size")
+    else:
+        print("*** Different window_size! ***")
+    if pbhs1.get_ULs()==pbhs2.get_ULs():
+        print("Same UL for burst size threshold 2")
+    else:
+        print("*** Different ULs for burst size threshold 2! ***")
+
+
+def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=False):
+    pbhs = Pbh_combined(window_size)
+    pbhs.rho_dots=rho_dots
+    try:
+        pbhs.add_run(run)
+        print("Run %d processed." % run)
+    except:
+        print("*** Bad run: %d ***" % run)
+        raise
+    dump_pickle(pbhs, "pbhs_run"+str(run)+"_window"+str(window_size)+"-s.pkl")
+    if plot:
+        pbhs.plot_ll_vs_rho_dots(save_hist="ll_vs_rho_dots_run"+str(run)+"_window"+str(window_size)+"-s")
+        pbhs.plot_burst_hist(filename="burst_hists_run"+str(run)+"_window"+str(window_size)+"-s",
+                             title="Burst histogram run"+str(run)+""+str(window_size)+"-s window ", plt_log=True, error="Poisson")
+
+
+def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, rho_dots=np.arange(0, 2e7, 1e4), plot=False, overwrite=True):
+    print('Submitting a job for run %d with search window size %.1f'%(run_num, window_size))
+    #data_base_dir = '/raid/reedbuck/veritas/data/'
+    script_dir = '/raid/reedbuck/qfeng/pbh/'
+
+    runlist_df = pd.read_csv(filename, header=None)
+    runlist_df.columns = ["runNum"]
+    runlist = runlist_df.runNum.values
+    for run_num in runlist:
+        try:
+            pyscriptname = "pbh.py"
+            scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
+            scriptfullname = os.path.join(script_dir, scriptname)
+            pyscriptname = os.path.join(script_dir, pyscriptname)
+            if os.path.exists(scriptfullname):
+                print('*** Warning: script already exists: %s ***'%scriptfullname)
+                if not overwrite:
+                    sys.exit(1)
+                print('Overwriting...')
+            cvsname = 'trace_%d_%d.dat'%(run_num, itel)
+            logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
+            #script = open(scriptfullname, 'w')
+            with open(scriptfullname, 'w') as script:
+                script.write('#PBS -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
+                script.write('#PBS -o %s\n'%os.path.join(script_dir, 'qsub_%s.log'%scriptname))
+                script.write('#PBS -l walltime=24:00:00\n')
+                script.write('#PBS -l pvmem=5gb\n')
+                script.write('cd %s\n'%script_dir)
+                script.write('python %s -r %d -w %d >> %s\n'%(pyscriptname, run_num, window_size, logfilename))
+            script.close()
+            isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
+            print(isend_command)
+            #os.system(isend_command)
+            print("Run %d processed." % run_num)
+        except:
+            print("*** Can't process run: %d ***" % run_num)
+            raise
+
 
 if __name__ == "__main__":
+    parser = OptionParser()
+    parser.add_option("-r","--run",dest="run", default=None)
+    parser.add_option("-w","--window",dest="window",default=10)
+    parser.add_option("-p","--plot",dest="plot",default=False)
+    parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
+    #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
+    (options, args) = parser.parse_args()
+
+    if options.run is not None:
+        process_one_run(options.run, options.window, rho_dots=options.rho_dots, plot=options.plot)
+
     #test_singlet_remover()
     #pbh = test_burst_finding(window_size=5, runNum=55480, nlines=None, N_scramble=5,
     #                         save_hist="test_burst_finding_histo", bkg_method="rando")
-    pbh = test_ll(window_size=3, runNum=55480, N_scramble=3, verbose=False, rho_dots=np.arange(1e3, 5.e5, 1000.),
-                  save_hist="test_ll", bkg_method="scramble", rando_method="avg",
-                  burst_size=2)
+    #pbh = test_ll(window_size=3, runNum=55480, N_scramble=3, verbose=False, rho_dots=np.arange(1e3, 5.e5, 1000.),
+    #              save_hist="test_ll", bkg_method="scramble", rando_method="avg",
+    #              burst_size=2)
     #pbh = test_psf_func(Nburst=10, filename=None)
 
     #pbh = test_psf_func_sim(psf_width=0.05, Nsim=10000, prob="psf", Nbins=40, xlim=(0,0.5),
