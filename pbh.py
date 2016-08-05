@@ -1750,10 +1750,11 @@ def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
     dump_pickle(pbhs_combined, outfile+"_window"+str(window_size)+"-s_"+str(list_of_pbhs.shape[0])+"runs.pkl")
     return pbhs_combined
 
-def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble", overwrite=True):
+def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
+                     script_dir = '/raid/reedbuck/qfeng/pbh/', overwrite=True):
     print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
-    script_dir = '/raid/reedbuck/qfeng/pbh/'
+    #script_dir = '/raid/reedbuck/qfeng/pbh/'
 
     runlist_df = pd.read_csv(filename, header=None)
     runlist_df.columns = ["runNum"]
@@ -1806,7 +1807,7 @@ if __name__ == "__main__":
     if options.runlist is not None:
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
         qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
-                         bkg_method=options.bkg_method, overwrite=True)
+                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=True)
 
     if options.run is not None:
         print('\n\n#########################################')
