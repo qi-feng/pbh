@@ -62,6 +62,7 @@ class Pbh(object):
         self._burst_dict = {}  #{"Burst #": [event # in this burst]}, for internal use
         self.VERITAS_deadtime = 0.33e-3  # 0.33ms
         self.runNum = 0
+        self.data_dir = '/raid/reedbuck/qfeng/pbh/data'
 
     def read_photon_list(self, ts, RAs, Decs, Es, ELs):
         N_ = len(ts)
@@ -88,7 +89,7 @@ class Pbh(object):
 
         self.get_psf_lists()
 
-    def readEDfile(self, runNum=None, filename=None, dir="data"):
+    def readEDfile(self, runNum=None, filename=None, dir=self.data_dir):
         self.runNum = runNum
         self.filename = str(dir)+"/"+str(runNum) + ".anasum.root"
         if not os.path.isfile(self.filename) and filename is not None:
