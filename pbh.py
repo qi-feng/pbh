@@ -1148,6 +1148,8 @@ class Pbh_combined(Pbh):
         previous_n_runs = self.n_runs
         self.n_runs += 1
         self.do_step2345(pbh)
+        # in the combiner class this is the latest run Num
+        self.runNum = pbh.runNum
         self.runNums.append(pbh.runNum)
 
     def do_step2345(self, pbh):
