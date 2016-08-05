@@ -888,7 +888,7 @@ class Pbh(object):
             print("###############################################################################")
         return ll_
 
-    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(1e5, 2.e6, 100), verbose=False):
+    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False):
         #plot a vertical slice of Fig 8-4, for a given burst size and search window, scan through rho_dot and plot -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
@@ -1112,7 +1112,7 @@ class Pbh_combined(Pbh):
         self.N_scramble = 10
         self.verbose = False
         self.burst_sizes_set = set()
-        self.rho_dots = np.arange(0, 2.e9, 1.e5)
+        self.rho_dots = np.arange(0., 3.e5, 100)
 
     def change_window_size(self, window_size):
         self.window_size = window_size
@@ -1377,7 +1377,7 @@ class powerlaw:
         r_uniform = np.random.random_sample(n)
         return self.ppf(r_uniform)
 
-def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0, 2e7, 1e4), burst_size_thresh=2, filename="ll_vs_rho_dots.png",
+def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0., 3.e5, 100), burst_size_thresh=2, filename="ll_vs_rho_dots.png",
                             label_names=None, xlog=True, grid=True, plot_hline=True, show=False):
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -1723,7 +1723,7 @@ def comp_pbhs(pbhs1, pbhs2):
         print("*** Different ULs for burst size threshold 2! ***")
 
 
-def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=False, bkg_method="scramble"):
+def process_one_run(run, window_size, rho_dots=np.arange(0., 3.e5, 100), plot=False, bkg_method="scramble"):
     pbhs = Pbh_combined(window_size)
     pbhs.rho_dots=rho_dots
     pbhs.bkg_method = bkg_method
