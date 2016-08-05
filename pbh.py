@@ -1724,7 +1724,7 @@ def comp_pbhs(pbhs1, pbhs2):
 def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=False, bkg_method="scramble"):
     pbhs = Pbh_combined(window_size)
     pbhs.rho_dots=rho_dots
-    self.bkg_method = bkg_method
+    pbhs.bkg_method = bkg_method
     try:
         pbhs.add_run(run)
         print("Run %d processed." % run)
