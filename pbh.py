@@ -1105,7 +1105,7 @@ class Pbh_combined(Pbh):
         self.window_size = window_size
         #Some global parameters
         self.bkg_method = "scramble"
-        self.rando_method = "cell"
+        self.rando_method = "avg"
         self.N_scramble = 10
         self.verbose = False
         self.burst_sizes_set = set()
@@ -1718,9 +1718,10 @@ def comp_pbhs(pbhs1, pbhs2):
         print("*** Different ULs for burst size threshold 2! ***")
 
 
-def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=False):
+def process_one_run(run, window_size, rho_dots=np.arange(0, 2e7, 1e4), plot=False, bkg_method="scramble"):
     pbhs = Pbh_combined(window_size)
     pbhs.rho_dots=rho_dots
+    self.bkg_method = bkg_method
     try:
         pbhs.add_run(run)
         print("Run %d processed." % run)
@@ -1748,7 +1749,7 @@ def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
     dump_pickle(pbhs_combined, outfile+"_window"+str(window_size)+"-s_"+str(list_of_pbhs.shape[0])+"runs.pkl")
     return pbhs_combined
 
-def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, overwrite=True):
+def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble", overwrite=True):
     print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     script_dir = '/raid/reedbuck/qfeng/pbh/'
@@ -1776,9 +1777,9 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, ove
                 script.write('#PBS -l pvmem=5gb\n')
                 script.write('cd %s\n'%script_dir)
                 if plot:
-                    script.write('python %s -r %d -w %d -p >> %s\n'%(pyscriptname, run_num, window_size, logfilename))
+                    script.write('python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
                 else:
-                    script.write('python %s -r %d -w %d >> %s\n'%(pyscriptname, run_num, window_size, logfilename))
+                    script.write('python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
             script.close()
             isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             print(isend_command)
@@ -1796,13 +1797,15 @@ if __name__ == "__main__":
     parser.add_option("-w","--window",dest="window", type="float", default=10)
     #parser.add_option("-p","--plot",dest="plot",default=False)
     parser.add_option("-p","--plot", action="store_true", dest="plot", default=False)
+    parser.add_option("-b","--bkg_method", dest="bkg_method", default="scramble")
     #parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
 
     if options.runlist is not None:
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
-        qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot, overwrite=True)
+        qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
+                         bkg_method=options.bkg_method, overwrite=True)
 
     if options.run is not None:
         print('\n\n#########################################')
