@@ -1810,7 +1810,7 @@ if __name__ == "__main__":
     if options.run is not None:
         print('\n\n#########################################')
         print('Processing run %d with search window size %.1f'%(options.run, options.window))
-        process_one_run(options.run, options.window, plot=options.plot)
+        process_one_run(options.run, options.window, bkg_method=options.bkg_method, plot=options.plot)
 
     #test_singlet_remover()
     #pbh = test_burst_finding(window_size=5, runNum=55480, nlines=None, N_scramble=5,
