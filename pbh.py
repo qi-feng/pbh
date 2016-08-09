@@ -1126,12 +1126,32 @@ class Pbh_combined(Pbh):
         self.rho_dot_ULs = {}
         self.burst_sizes_set = set()
         #analyze again:
-        for pbh_ in self.pbhs:
-            _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
-            _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
-                                                               method=self.bkg_method,copy=True, n_scramble=self.N_scramble,
-                                                               return_burst_dict=True, verbose=self.verbose)
-            self.do_step2345(pbh_)
+        if isinstance(self.pbhs[0], Pbh_combined):
+            for pbhs_ in self.pbhs:
+                pbhs_.window_size = window_size
+                pbhs_.sig_burst_hist = {}
+                pbhs_.avg_bkg_hist = {}
+                pbhs_.residual_dict = {}
+                pbhs_.total_time_year = 0
+                pbhs_.effective_volumes = {}
+                pbhs_.minimum_lls = {}
+                pbhs_.rho_dot_ULs = {}
+                pbhs_.burst_sizes_set = set()
+                for pbh_ in pbhs_:
+                    _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
+                    _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
+                                                                       method=self.bkg_method,copy=True, n_scramble=self.N_scramble,
+                                                                       return_burst_dict=True, verbose=self.verbose)
+                    pbhs_.do_step2345(pbh_)
+                self.do_step2345(pbhs_)
+        else:
+            for pbh_ in self.pbhs:
+                _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
+                _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
+                                                                   method=self.bkg_method,copy=True, n_scramble=self.N_scramble,
+                                                                   return_burst_dict=True, verbose=self.verbose)
+                self.do_step2345(pbh_)
+
         rho_dot_ULs = self.get_ULs()
         return rho_dot_ULs
 
