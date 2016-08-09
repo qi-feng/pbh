@@ -1137,7 +1137,7 @@ class Pbh_combined(Pbh):
                 pbhs_.minimum_lls = {}
                 pbhs_.rho_dot_ULs = {}
                 pbhs_.burst_sizes_set = set()
-                for pbh_ in pbhs_:
+                for pbh_ in pbhs_.pbhs:
                     _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
                     _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size, rando_method=self.rando_method,
                                                                        method=self.bkg_method,copy=True, n_scramble=self.N_scramble,
