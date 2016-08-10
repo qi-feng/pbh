@@ -1400,7 +1400,7 @@ class powerlaw:
         return self.ppf(r_uniform)
 
 def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0., 3.e5, 100), burst_size_thresh=2, filename="ll_vs_rho_dots.png",
-                            label_names=None, xlog=True, grid=True, plot_hline=True, show=False):
+                            label_names=None, xlog=True, grid=True, plot_hline=True, show=False, xlim=None, ylim=None):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     if label_names is not None:
@@ -1423,6 +1423,10 @@ def plot_pbh_ll_vs_rho_dots(pbhs_list, rho_dots=np.arange(0., 3.e5, 100), burst_
         plt.xscale('log')
     if grid:
         plt.grid(b=True)
+    if xlim is not None:
+        plt.xlim(xlim)
+    if ylim is not None:
+        plt.ylim(ylim)
     plt.savefig(filename, dpi=300)
     if show:
         plt.show()
@@ -1604,7 +1608,7 @@ def test_ll(window_sizes=[1,2,5,10], colors=['k', 'r', 'b', 'magenta'], runNum=5
     if grid:
         plt.grid(b=True)
     filename=save_hist+"_AllEvts.png"
-    plt.savefig(filename, dpi=150)
+    plt.savefig(filename, dpi=300)
     plt.show()
     print("Done!")
 
@@ -1702,7 +1706,7 @@ def plot_Veff(pbh, window_sizes=[1, 10, 100], burst_sizes=range(2,11), lss=['-',
     plt.ylabel(r"effective volume (pc$^3$)")
     plt.legend(loc='best')
     if filename is not None:
-        plt.savefig(filename, dpi=150)
+        plt.savefig(filename, dpi=300)
     plt.show()
 
 
@@ -1755,7 +1759,7 @@ def process_one_run(run, window_size, rho_dots=np.arange(0., 3.e5, 100), plot=Fa
     except:
         print("*** Bad run: %d ***" % run)
         raise
-    dump_pickle(pbhs, "pbhs_run"+str(run)+"_window"+str(window_size)+"-s.pkl")
+    dump_pickle(pbhs, "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run)+"_window"+str(window_size)+"-s.pkl")
     if plot:
         pbhs.plot_ll_vs_rho_dots(save_hist="ll_vs_rho_dots_run"+str(run)+"_window"+str(window_size)+"-s")
         pbhs.plot_burst_hist(filename="burst_hists_run"+str(run)+"_window"+str(window_size)+"-s.png",
