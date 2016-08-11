@@ -1716,6 +1716,18 @@ def test2():
     print(pbh.photon_df.head())
     return pbh
 
+
+def combine_from_pickle_list(listname, window_size, filetag=""):
+    pbhs_combined_all_ = combine_pbhs_from_pickle_list(listname)
+    print("Total exposure time is %.2f hrs" % (pbhs_combined_all_.total_time_year*365.25*24))
+    pbhs_combined_all_.get_ULs()
+    print("The effective volume above burst size 2 is %.6f pc^3" % (pbhs_combined_all_.effective_volumes[2]))
+    print("There are %d runs in total" % (len(pbhs_combined_all_.runNums)))
+    total_N_runs = len(pbhs_combined_all_.runNums)
+    pbhs_combined_all_.plot_burst_hist(filename="burst_hists_test_"+str(filetag)+"_window"+str(window_size)+"-s_all"+str(total_N_runs)+"runs", title="Burst histogram "+str(window_size)+"-s window "+str(total_N_runs)+" runs", plt_log=True, error="Poisson")
+    pbhs_combined_all_.plot_ll_vs_rho_dots(save_hist="ll_vs_rho_dots_test_"+str(filetag)+"_window"+str(window_size)+"-s_all"+str(total_N_runs)+"runs")
+    return pbhs_combined_all_
+
 def comp_pbhs(pbhs1, pbhs2):
     if pbhs1.total_time_year==pbhs2.total_time_year:
         print("Same total time")
@@ -1830,6 +1842,7 @@ if __name__ == "__main__":
     #parser.add_option("-p","--plot",dest="plot",default=False)
     parser.add_option("-p","--plot", action="store_true", dest="plot", default=False)
     parser.add_option("-b","--bkg_method", dest="bkg_method", default="scramble")
+    parser.add_option("-m","--makeup", action="store_false", dest="overwrite", default=True)
     #parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
@@ -1837,7 +1850,7 @@ if __name__ == "__main__":
     if options.runlist is not None:
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
         qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
-                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=True)
+                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite)
 
     if options.run is not None:
         print('\n\n#########################################')
