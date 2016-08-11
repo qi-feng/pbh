@@ -1807,11 +1807,14 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
             scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
             scriptfullname = os.path.join(script_dir, scriptname)
             pyscriptname = os.path.join(script_dir, pyscriptname)
-            if os.path.exists(scriptfullname):
+            pklname = "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run)+"_window"+str(window_size)+"-s.pkl"
+            #if os.path.exists(scriptfullname):
+            if os.path.exists(pklname):
                 print('*** Warning: script already exists: %s ***'%scriptfullname)
                 if not overwrite:
                     print("Aborting")
                     continue
+                    #sys.exit(1)
                 print('Overwriting...')
             logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
             #script = open(scriptfullname, 'w')
