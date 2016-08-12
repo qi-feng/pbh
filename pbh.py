@@ -1807,10 +1807,11 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
             scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
             scriptfullname = os.path.join(script_dir, scriptname)
             pyscriptname = os.path.join(script_dir, pyscriptname)
-            pklname = "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run)+"_window"+str(window_size)+"-s.pkl"
+            pklname = "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run_num)+"_window"+str(window_size)+"-s.pkl"
             #if os.path.exists(scriptfullname):
             if os.path.exists(pklname):
-                print('*** Warning: script already exists: %s ***'%scriptfullname)
+                #print('*** Warning: script already exists: %s ***'%scriptfullname)
+                print('*** Warning: pickle file already exists: %s ***'%pklname)
                 if not overwrite:
                     print("Aborting")
                     continue
