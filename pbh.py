@@ -135,6 +135,8 @@ class Pbh(object):
                            columns=columns)
         ###QF short breaker:
         #breaker = 0
+        #self.alltimes for the use of scramble (will be in random order, sort it to get true all times)
+        self.all_times = np.zeros(N_)
         i_gamma = 0
         for i, event in enumerate(all_gamma_tree):
             #if nlines is not None:
@@ -144,6 +146,7 @@ class Pbh(object):
             #time_index=np.argmax(ptTime>event.Time)
             #making cut:
             #this is quite essential to double check!!!
+            self.all_times[i] = event.timeOfDay
             if event.Energy < E_lo_cut or event.Energy > E_hi_cut or event.TelElevation < EL_lo_cut or event.IsGamma==0:
                 df_.fail_cut.at[i] = 1
                 continue
@@ -158,6 +161,8 @@ class Pbh(object):
             df_.ELs[i] = event.TelElevation
 
         print("There are %d events, %d of which are gamma-like" % (N_,i_gamma))
+        self.N_all_events = N_
+        self.N_gamma_events = i_gamma
         #df_.coords = np.concatenate([df_.RAs.reshape(N_,1), df_.Decs.reshape(N_,1)], axis=1)
         df_.psfs = np.zeros(N_)
         # by def all events are at least a singlet
@@ -201,15 +206,20 @@ class Pbh(object):
         self.accept = self.Rfile.Get(accept_Name);
         #use self.accept.Eval(x) to get y, or just self.accept(x)
 
-    def scramble(self, copy=False):
+    def scramble(self, copy=False, all=True):
         if not hasattr(self, 'photon_df'):
             print("Call get_TreeWithAllGamma first...")
         if copy:
             # if you want to keep the original burst_dict, this should only happen at the 1st scramble
             if not hasattr(self, 'photon_df_orig'):
                 self.photon_df_orig = self.photon_df.copy()
-        ts_ = self.photon_df.ts.values
-        random.shuffle(ts_)
+        if all:
+            #shuffle among the arrival time of all events
+            random.shuffle(self.all_times)
+            ts_ = self.all_times[:self.N_gamma_events]
+        else:
+            ts_ = self.photon_df.ts.values
+            random.shuffle(ts_)
         self.photon_df.at[:, 'ts'] = ts_
         # re-init _burst_dict for counting
         self._burst_dict = {}
@@ -242,11 +252,11 @@ class Pbh(object):
             #elif rate=="avg":
 
             # draw a rando!
-            _rando_delta_t = np.random.exponential(rate_expected)
+            _rando_delta_t = np.random.exponential(1./rate_expected)
             inf_loop_preventer = 0
             inf_loop_bound = 100
             while _rando_delta_t < self.VERITAS_deadtime:
-                _rando_delta_t = np.random.exponential(rate_expected)
+                _rando_delta_t = np.random.exponential(1./rate_expected)
                 inf_loop_preventer += 1
                 if inf_loop_preventer > inf_loop_bound:
                     print("Tried 100 times and can't draw a rando wait time that's larger than VERITAS deadtime,")
