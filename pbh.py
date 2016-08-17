@@ -229,7 +229,7 @@ class Pbh(object):
         self.photon_df=self.photon_df.sort('ts')
         return ts_
 
-    def t_rando(self, copy=True, rate="avg"):
+    def t_rando(self, copy=True, rate="avg", all_events=True):
         """
         throw Poisson distr. ts based on the original ts,
         use 1/delta_t as the expected Poisson rate for each event
@@ -243,25 +243,45 @@ class Pbh(object):
         if rate=="cell":
             delta_ts = np.diff(self.photon_df.ts)
         #for i, _delta_t in enumerate(delta_ts):
-        N = self.photon_df.shape[0]
-        rate_expected= N*1.0/(self.photon_df.ts.values[-1]-self.photon_df.ts.values[0])
+        if all_events:
+            N = self.N_all_events
+            self.rando_all_times = np.zeros(N)
+            rate_expected= N*1.0/(self.all_times[-1]-self.all_times[0])
+        else:
+            N = self.photon_df.shape[0]
+            rate_expected= N*1.0/(self.photon_df.ts.values[-1]-self.photon_df.ts.values[0])
         print("Mean expected rate is %.2f" % rate_expected)
         for i in range(N-1):
             if rate=="cell":
                 rate_expected = 1. / delta_ts[i]
             #elif rate=="avg":
-
-            # draw a rando!
-            _rando_delta_t = np.random.exponential(1./rate_expected)
-            inf_loop_preventer = 0
-            inf_loop_bound = 100
-            while _rando_delta_t < self.VERITAS_deadtime:
+            if all_events:
                 _rando_delta_t = np.random.exponential(1./rate_expected)
-                inf_loop_preventer += 1
-                if inf_loop_preventer > inf_loop_bound:
-                    print("Tried 100 times and can't draw a rando wait time that's larger than VERITAS deadtime,")
-                    print("you'd better check your time unit or something...")
-            self.photon_df.at[i + 1, 'ts'] = self.photon_df.ts[i] + _rando_delta_t
+                inf_loop_preventer = 0
+                inf_loop_bound = 100
+                while _rando_delta_t < self.VERITAS_deadtime:
+                    _rando_delta_t = np.random.exponential(1./rate_expected)
+                    inf_loop_preventer += 1
+                    if inf_loop_preventer > inf_loop_bound:
+                        print("Tried 100 times and can't draw a rando wait time that's larger than VERITAS deadtime,")
+                        print("you'd better check your time unit or something...")
+                self.rando_all_times[i + 1] = self.rando_all_times[i] + _rando_delta_t
+            else:
+                # draw a rando!
+                _rando_delta_t = np.random.exponential(1./rate_expected)
+                inf_loop_preventer = 0
+                inf_loop_bound = 100
+                while _rando_delta_t < self.VERITAS_deadtime:
+                    _rando_delta_t = np.random.exponential(1./rate_expected)
+                    inf_loop_preventer += 1
+                    if inf_loop_preventer > inf_loop_bound:
+                        print("Tried 100 times and can't draw a rando wait time that's larger than VERITAS deadtime,")
+                        print("you'd better check your time unit or something...")
+                self.photon_df.at[i + 1, 'ts'] = self.photon_df.ts[i] + _rando_delta_t
+        if all_events:
+            random.shuffle(self.rando_all_times)
+            for i, in range(self.photon_df.shape[0]):
+                self.photon_df.at[i, 'ts'] = self.rando_all_times[i]
         #naturally sorted
         # re-init _burst_dict for counting
         self._burst_dict = {}
