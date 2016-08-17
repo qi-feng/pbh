@@ -124,16 +124,16 @@ class UL_on_off(object):
             lls.append(ll_)
         lls = np.array(lls)
         slice_ = np.where(abs(lls-ll_thresh)<tol)
-        if lls[slice].shape[0]==2:
-            print("Rolke's %d%% confidence range: %.2f - %.2f" % (cl*100, lls[slice][0], lls[slice][1]))
-            return lls[slice]
-        elif lls[slice].shape[0]==1:
-            print("Found one Rolke's %d%% confidence limit: %.2f" % (cl*100, lls[slice]))
-            return lls[slice]
-        elif lls[slice].shape[0]>2:
+        if lls[slice_].shape[0]==2:
+            print("Rolke's %d%% confidence range: %.2f - %.2f" % (cl*100, lls[slice_][0], lls[slice_][1]))
+            return lls[slice_]
+        elif lls[slice_].shape[0]==1:
+            print("Found one Rolke's %d%% confidence limit: %.2f" % (cl*100, lls[slice_]))
+            return lls[slice_]
+        elif lls[slice_].shape[0]>2:
             tol /= 10.
             self.get_Rolke_UL(cl=cl, tol=tol)
-        elif lls[slice].shape[0]==0:
+        elif lls[slice_].shape[0]==0:
             tol *= 5.
             self.get_Rolke_UL(cl=cl, tol=tol)
 
