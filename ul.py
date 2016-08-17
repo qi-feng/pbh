@@ -87,9 +87,11 @@ class UL_on_off(object):
         self.cdfs_off = np.sum(self.Z, axis=0)
 
     def fit_gaus(self, p0 = [1.e-2, 0., 1.], bkg=False):
+        if not hasattr(self, 'cdfs'):
+            self.get_marginal()
         # p0 is the initial guess for the fitting coefficients (A, mu and sigma above)
         if not bkg:
-            popt, pcov = curve_fit(gaus, us, cdfs, p0=p0)
+            popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0)
             self.fit_A, self.fit_mu, self.fit_sigma = popt
             self.fit_dA, self.fit_dmu, self.fit_dsigma = np.sqrt(np.diag(pcov))
             return self.fit_A, self.fit_mu, self.fit_sigma
@@ -135,8 +137,12 @@ class UL_on_off(object):
             tol *= 5.
             self.get_Rolke_UL(cl=cl, tol=tol)
 
-ul1 = UL_on_off(44710., 44302.)
-ul1.search_mesh(us=np.arange(-500, 1300), bs=np.arange(43500, 45000), p0 = [1.e-3, 408, 300.])
+def test():
+    ul1 = UL_on_off(44710., 44302.)
+    ul1.search_mesh(us=np.arange(-500, 1300), bs=np.arange(43500, 45000), p0 = [1.e-3, 408, 300.])
+    print ul1.get_DH_UL()
+    print ul1.get_Rolke_UL()
+    return test()
 
-print ul1.get_DH_UL()
-print ul1.get_Rolke_UL()
+if __name__=='__main__':
+    test()
