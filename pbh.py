@@ -206,14 +206,14 @@ class Pbh(object):
         self.accept = self.Rfile.Get(accept_Name);
         #use self.accept.Eval(x) to get y, or just self.accept(x)
 
-    def scramble(self, copy=False, all=True):
+    def scramble(self, copy=True, all_events=True):
         if not hasattr(self, 'photon_df'):
             print("Call get_TreeWithAllGamma first...")
         if copy:
             # if you want to keep the original burst_dict, this should only happen at the 1st scramble
             if not hasattr(self, 'photon_df_orig'):
                 self.photon_df_orig = self.photon_df.copy()
-        if all:
+        if all_events:
             #shuffle among the arrival time of all events
             random.shuffle(self.all_times)
             ts_ = self.all_times[:self.N_gamma_events]
@@ -229,7 +229,7 @@ class Pbh(object):
         self.photon_df=self.photon_df.sort('ts')
         return ts_
 
-    def t_rando(self, copy=False, rate="avg"):
+    def t_rando(self, copy=True, rate="avg"):
         """
         throw Poisson distr. ts based on the original ts,
         use 1/delta_t as the expected Poisson rate for each event
@@ -717,8 +717,8 @@ class Pbh(object):
         self.sig_burst_dict = _sig_burst_dict.copy()
         return self.sig_burst_hist, self.sig_burst_dict
 
-    def estimate_bkg_burst(self, window_size=1, method="scramble", copy=True, n_scramble=1, rando_method="avg",
-                           return_burst_dict=False, verbose=False):
+    def estimate_bkg_burst(self, window_size=1, method="scramble", copy=True, n_scramble=10, rando_method="avg",
+                           return_burst_dict=False, verbose=False, all=True):
         """
         :param method: either "scramble" or "rando"
         :return:
@@ -730,7 +730,7 @@ class Pbh(object):
         for i in range(n_scramble):
             #bkg_burst_hist = pbh.estimate_bkg_burst(window_size=window_size)
             if method == "scramble":
-                self.scramble(copy=copy)
+                self.scramble(copy=copy, all=all)
             elif method == "rando":
                 self.t_rando(copy=copy, rate=rando_method)
             bkg_burst_hist, bkg_burst_dict = self.search_time_window(window_size=window_size, verbose=verbose)
@@ -794,6 +794,9 @@ class Pbh(object):
         return n_exp_gamma
 
     def get_integral_expected(self, kT_BH, verbose=False):
+        #integrate over EA between energies:
+        self.elo = 80.
+        self.ehi = 50000.
         #eq 8.3 with no acceptance (I in eq 8.7); EA normalized to the unit of pc^2
         #The expected # of gammas
         if not hasattr(self,'EA'):
@@ -809,7 +812,7 @@ class Pbh(object):
             number_expected[count, 1] = diff_n_exp * ea_ / (3.086e+16**2)
             count += 1
             # 1 pc = 3.086e+16 m
-        energy_cut_indices = np.where((number_expected[:, 0]>=80.) & (number_expected[:, 0]<=50000.))
+        energy_cut_indices = np.where((number_expected[:, 0]>=self.elo) & (number_expected[:, 0]<=self.ehi))
         integral_expected = np.trapz(number_expected[energy_cut_indices, 1], x=number_expected[energy_cut_indices, 0])
         #This is the "I**(3./2)" in eq 8.7 in Simon's thesis
         integral_expected = integral_expected**(3./2.)
@@ -1297,7 +1300,7 @@ class Pbh_combined(Pbh):
     @autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
                        verbose=False):
-        #search rho_dots for the minimum -2lnL
+        #search rho_dots for the minimum -2lnL for burst size >= burst_size
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
         min_ll_ = 1.e5
@@ -1720,6 +1723,47 @@ def plot_Veff(pbh, window_sizes=[1, 10, 100], burst_sizes=range(2,11), lss=['-',
     plt.show()
 
 
+def plot_residual_vs_n_expected(pbhs, rho_dots, colors=None, draw_grid=True, ylim=None,
+                                filename="residual_vs_n_expected.png", show=True, ylog=False):
+    n_expected=np.zeros(len(pbhs.burst_sizes_set))
+    if not isinstance(rho_dots, list):
+        rho_dots = [rho_dots]
+    if colors is not None:
+        if len(colors) != len(rho_dots):
+            print("colors provided has a different length from rho_dots!")
+            colors=None
+    residual_dict=pbhs.get_residual_hist()
+    sig_err = np.sqrt(np.array(pbhs.sig_burst_hist.values()).astype('float'))
+    bkg_err = np.sqrt(np.array(pbhs.avg_bkg_hist.values()).astype('float'))
+    res_err = np.sqrt(sig_err**2+bkg_err**2)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.errorbar(residual_dict.keys()[1:], residual_dict.values()[1:], xerr=0.5, yerr=res_err[1:], fmt='bs', capthick=0,
+                 label="Residual")
+    for k, rho_dot in enumerate(rho_dots):
+        for i, b in enumerate(pbhs.burst_sizes_set):
+            n_expected[i]=pbhs.n_excess(rho_dot, pbhs.effective_volumes[b])
+        if colors is not None:
+            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], color=colors[k], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+        else:
+            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+    ax.axhline(y=0, color='gray', ls='--')
+    ax.set_xlabel("Burst size")
+    ax.set_ylabel("Counts")
+    if ylim is not None:
+        plt.ylim(ylim)
+    if ylog:
+        plt.yscale('log')
+    plt.legend(loc='best')
+    if draw_grid:
+        plt.grid(b=True)
+    #plt.yscale('log')
+    if filename is not None:
+        plt.savefig(filename, dpi=300)
+    if show:
+        plt.show()
+
+
 def test2():
     pbh = Pbh()
     pbh.get_TreeWithAllGamma(runNum=55480, nlines=1000)
@@ -1786,6 +1830,10 @@ def process_one_run(run, window_size, rho_dots=np.arange(0., 3.e5, 100), plot=Fa
         pbhs.plot_ll_vs_rho_dots(save_hist="ll_vs_rho_dots_run"+str(run)+"_window"+str(window_size)+"-s")
         pbhs.plot_burst_hist(filename="burst_hists_run"+str(run)+"_window"+str(window_size)+"-s.png",
                              title="Burst histogram run"+str(run)+""+str(window_size)+"-s window ", plt_log=True, error="Poisson")
+
+def ll(n_on, n_off, n_expected):
+        #eq 8.13 without the sum
+        return -2. * (-1. * n_expected + n_on * np.log(n_off + n_expected))
 
 def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
     list_df = pd.read_csv(list_of_pbhs_pickle, header=None)
