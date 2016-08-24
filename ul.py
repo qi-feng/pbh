@@ -49,10 +49,10 @@ class UL_on_off(object):
     """
     def __init__(self, x, y, tau=1.0):
         self.ul=0.0
-        #y is measured number of OFF events in bkg region
-        self.y=x
         #x is measured number of ON events in the signal region
-        self.x=y
+        self.x=x
+        #y is measured number of OFF events in bkg region
+        self.y=y
         #tau is 1./alpha
         self.tau=tau
 
@@ -70,6 +70,7 @@ class UL_on_off(object):
         if hasattr(self, 'us') and hasattr(self, 'bs'):
             self.X, self.Y = np.meshgrid(self.us, self.bs, indexing='ij')
             self.Z = np.zeros((self.us.shape[0], self.bs.shape[0]))
+            self.Z = np.nan_to_num(self.Z)
             for i, u in enumerate(self.us):
                 for j, b in enumerate(self.bs):
                     self.Z[i,j] = counting_pdf(self.x, self.y, u, b, self.tau)
@@ -87,34 +88,46 @@ class UL_on_off(object):
         self.cdfs_off = np.sum(self.Z, axis=0)
 
     def fit_gaus(self, p0 = [1.e-2, 0., 1.], bkg=False):
+        #bounds=((0, 0, 0), (np.inf, np.inf, np.inf))
         if not hasattr(self, 'cdfs'):
             self.get_marginal()
         # p0 is the initial guess for the fitting coefficients (A, mu and sigma above)
         if not bkg:
+            #popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0, bounds=bounds)
             popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0)
             self.fit_A, self.fit_mu, self.fit_sigma = popt
+            self.fit_A = abs(self.fit_A)
+            self.fit_mu = (self.fit_mu)
+            self.fit_sigma = abs(self.fit_sigma)
             self.fit_dA, self.fit_dmu, self.fit_dsigma = np.sqrt(np.diag(pcov))
             return self.fit_A, self.fit_mu, self.fit_sigma
         else:
-            popt, pcov = curve_fit(gaus, us, cdfs, p0=p0)
+            #popt, pcov = curve_fit(gaus, us, cdfs, p0=p0, bounds=bounds)
+            popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0)
             self.fit_A_off, self.fit_mu_off, self.fit_sigma_off = popt
+            self.fit_A_off = abs(self.fit_A_off)
+            self.fit_mu_off = (self.fit_mu_off)
+            self.fit_sigma_off = abs(self.fit_sigma_off)
             self.fit_dA_off, self.fit_dmu_off, self.fit_dsigma_off = np.sqrt(np.diag(pcov))
             return self.fit_A_off, self.fit_mu_off, self.fit_sigma_off
 
     def plot_pdf(self):
         plt.subplot(1, 1, 1)
-        im = plt.pcolormesh(X, Y, Z, cmap=cm.coolwarm)
+        im = plt.pcolormesh(self.X, self.Y, self.Z, cmap=cm.coolwarm)
         plt.colorbar()
 
-    def get_DH_UL(self, cl=0.9):
+    def get_H_UL(self, cl=0.9):
         if not hasattr(self, 'fit_mu'):
             print("Need to fit first! Doing it...")
             self.fit_gaus()
         self.norm_negative = norm.cdf(0, loc=self.fit_mu, scale=self.fit_sigma)
         self.norm_positive = 1. - self.norm_negative
         self.ul = norm.ppf(self.norm_negative + cl*self.norm_positive, loc=self.fit_mu, scale=self.fit_sigma)
-        print("David Hanna's %d%% UL is %.2f" % (cl*100, self.ul))
+        print("Helene's (also Hanna's) %d%% UL is %.2f" % (cl*100, self.ul))
         return self.ul
+
+    def get_sig_pdf(self, x):
+        self.pdf = norm.pdf(x, loc=self.fit_mu, scale=self.fit_sigma)
 
     def get_Rolke_UL(self, cl=0.9, tol=5e-3):
         ll_thresh = chi2.ppf(cl, 1)
@@ -125,11 +138,13 @@ class UL_on_off(object):
         lls = np.array(lls)
         slice_ = np.where(abs(lls-ll_thresh)<tol)
         if lls[slice_].shape[0]==2:
-            print("Rolke's %d%% confidence range: %.2f - %.2f" % (cl*100, lls[slice_][0], lls[slice_][1]))
-            return lls[slice_]
+            print("Rolke's %d%% confidence range: %.2f - %.2f" % (cl*100, self.us[slice_][0], self.us[slice_][1]))
+            self.ul = self.us[slice_]
+            return self.us[slice_]
         elif lls[slice_].shape[0]==1:
-            print("Found one Rolke's %d%% confidence limit: %.2f" % (cl*100, lls[slice_]))
-            return lls[slice_]
+            print("Found one Rolke's %d%% confidence limit: %.2f" % (cl*100, self.us[slice_]))
+            self.ul = self.us[slice_]
+            return self.us[slice_]
         elif lls[slice_].shape[0]>2:
             tol /= 10.
             self.get_Rolke_UL(cl=cl, tol=tol)
@@ -139,10 +154,10 @@ class UL_on_off(object):
 
 def test():
     ul1 = UL_on_off(44710., 44302.)
-    ul1.search_mesh(us=np.arange(-500, 1300), bs=np.arange(43500, 45000), p0 = [1.e-3, 408, 300.])
-    print ul1.get_DH_UL()
+    ul1.search_mesh(us=np.arange(-500, 1300), bs=np.arange(43500, 45000), p0 = [1.e-3, 408., 300.])
+    print ul1.get_H_UL()
     print ul1.get_Rolke_UL()
-    return test()
+    return ul1
 
 if __name__=='__main__':
     test()
