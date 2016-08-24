@@ -1784,7 +1784,7 @@ def plot_residual_vs_n_expected(pbhs, rho_dots, colors=None, draw_grid=True, yli
         plt.show()
 
 def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True, ylim=None,
-                                filename="residual_UL_n_expected.png", show=True, ylog=False):
+                                filename="residual_UL_n_expected.png", show=True, ylog=False, verbose=True):
     n_expected=np.zeros(len(pbhs.burst_sizes_set))
     if not isinstance(rho_dots, list):
         rho_dots = [rho_dots]
@@ -1807,6 +1807,9 @@ def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True
             ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], color=colors[k], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
         else:
             ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+        if verbose:
+            print("Expected rate for rho_dot=%.1f is" % rho_dot)
+            print(n_expected)
 
     ax.plot(residual_dict.keys()[1:], ULs, color='r', marker='v', label="90% UL Helene")
     ax.axhline(y=0, color='gray', ls='--')
@@ -1824,7 +1827,7 @@ def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True
         plt.savefig(filename, dpi=300)
     if show:
         plt.show()
-
+    #return n_expected
 
 def test2():
     pbh = Pbh()
