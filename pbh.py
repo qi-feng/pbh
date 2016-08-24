@@ -1804,9 +1804,9 @@ def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True
         for i, b in enumerate(pbhs.burst_sizes_set):
             n_expected[i]=pbhs.n_excess(rho_dot, pbhs.effective_volumes[b])
         if colors is not None:
-            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], color=colors[k], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], color=colors[k], label=r"Expected excess of bursts $\dot{\rho}$="+str(rho_dot))
         else:
-            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], label=r"Expected excess of bursts $\dot{\rho}$="+str(rho_dot))
         if verbose:
             print("Expected rate for rho_dot=%.1f is" % rho_dot)
             print(n_expected)

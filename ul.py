@@ -70,10 +70,10 @@ class UL_on_off(object):
         if hasattr(self, 'us') and hasattr(self, 'bs'):
             self.X, self.Y = np.meshgrid(self.us, self.bs, indexing='ij')
             self.Z = np.zeros((self.us.shape[0], self.bs.shape[0]))
-            self.Z = np.nan_to_num(self.Z)
             for i, u in enumerate(self.us):
                 for j, b in enumerate(self.bs):
                     self.Z[i,j] = counting_pdf(self.x, self.y, u, b, self.tau)
+            self.Z = np.nan_to_num(self.Z)
         else:
             print("Set us and bs first!")
 
@@ -113,7 +113,7 @@ class UL_on_off(object):
 
     def plot_pdf(self):
         plt.subplot(1, 1, 1)
-        im = plt.pcolormesh(self.X, self.Y, self.Z, cmap=cm.coolwarm)
+        im = plt.pcolormesh(self.X, self.Y, self.Z, cmap=plt.cm.coolwarm)
         plt.colorbar()
 
     def get_H_UL(self, cl=0.9):
