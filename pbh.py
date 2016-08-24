@@ -1808,7 +1808,7 @@ def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True
         else:
             ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
 
-    ax.plot(residual_dict.keys()[1:], limits, color='r', marker='v', label="90% UL Helene")
+    ax.plot(residual_dict.keys()[1:], ULs, color='r', marker='v', label="90% UL Helene")
     ax.axhline(y=0, color='gray', ls='--')
     ax.set_xlabel("Burst size")
     ax.set_ylabel("Counts")
