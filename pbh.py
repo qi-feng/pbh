@@ -1783,6 +1783,48 @@ def plot_residual_vs_n_expected(pbhs, rho_dots, colors=None, draw_grid=True, yli
     if show:
         plt.show()
 
+def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True, ylim=None,
+                                filename="residual_UL_n_expected.png", show=True, ylog=False):
+    n_expected=np.zeros(len(pbhs.burst_sizes_set))
+    if not isinstance(rho_dots, list):
+        rho_dots = [rho_dots]
+    if colors is not None:
+        if len(colors) != len(rho_dots):
+            print("colors provided has a different length from rho_dots!")
+            colors=None
+    residual_dict=pbhs.get_residual_hist()
+    sig_err = np.sqrt(np.array(pbhs.sig_burst_hist.values()).astype('float'))
+    bkg_err = np.sqrt(np.array(pbhs.avg_bkg_hist.values()).astype('float'))
+    res_err = np.sqrt(sig_err**2+bkg_err**2)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.errorbar(residual_dict.keys()[1:], residual_dict.values()[1:], xerr=0.5, yerr=res_err[1:], fmt='bs', capthick=0,
+                 label="Residual")
+    for k, rho_dot in enumerate(rho_dots):
+        for i, b in enumerate(pbhs.burst_sizes_set):
+            n_expected[i]=pbhs.n_excess(rho_dot, pbhs.effective_volumes[b])
+        if colors is not None:
+            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], color=colors[k], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+        else:
+            ax.plot(list(pbhs.burst_sizes_set)[1:], n_expected[1:], label=r"Expected number of bursts $\dot{\rho}$="+str(rho_dot))
+
+    ax.plot(residual_dict.keys()[1:], limits, color='r', marker='v', label="90% UL Helene")
+    ax.axhline(y=0, color='gray', ls='--')
+    ax.set_xlabel("Burst size")
+    ax.set_ylabel("Counts")
+    if ylim is not None:
+        plt.ylim(ylim)
+    if ylog:
+        plt.yscale('log')
+    plt.legend(loc='best')
+    if draw_grid:
+        plt.grid(b=True)
+    #plt.yscale('log')
+    if filename is not None:
+        plt.savefig(filename, dpi=300)
+    if show:
+        plt.show()
+
 
 def test2():
     pbh = Pbh()
