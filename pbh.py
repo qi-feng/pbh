@@ -817,7 +817,7 @@ class Pbh(object):
         #integrate over EA between energies:
         self.elo = 80.
         self.ehi = 50000.
-        #eq 8.3 with no acceptance (I in eq 8.7); EA normalized to the unit of pc^2
+        #the integral part of eq 8.3 with no acceptance raised to 3/2 power (I^3/2 in eq 8.7); EA normalized to the unit of pc^2
         #The expected # of gammas
         if not hasattr(self,'EA'):
             print("self.EA doesn't exist, reading it now")
@@ -1288,6 +1288,17 @@ class Pbh_combined(Pbh):
         pbh_.getRunSummary()
         self.add_pbh(pbh_)
         #self.runNums.append(runNum)
+
+    def n_excess(self, rho_dot, Veff, verbose=False):
+        #eq 8.8, or maybe more appropriately call it n_expected
+        if not hasattr(self, 'total_time_year'):
+            self.total_time_year = (self.tOn*(1.-self.DeadTimeFracOn))/31536000.
+        #n_ex = 1.0 * rho_dot * self.total_time_year * Veff
+        # because the burst likelihood cut -9.5 is at 90% CL
+        n_ex = 0.9 * rho_dot * self.total_time_year * Veff
+        if verbose:
+            print("The value of the expected number of bursts (eq 8.9) is %.2f" % n_ex)
+        return n_ex
 
     #Override get_ll so that it knows where to find the effective volume
     def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
@@ -1836,6 +1847,67 @@ def test2():
     return pbh
 
 
+def get_n_expected(pbh, t_window, r, verbose=False):
+    #get expected gamma-ray rate from a pbh signal at distance r (pc)
+    #eq 8.3; no acceptance, assume an on-axis event
+    I_Value = pbh.get_integral_expected(pbh.kT_BH(t_window))
+    I_Value = I_Value**(2./3.)/(4.*np.pi*r*r)
+    if verbose:
+        print("The expected gamma-ray rate from a pbh signal at distance %.4f (pc) is %.2f" % (r, I_Value))
+    return I_Value
+
+def plot_n_expected(pbh, t_window, rs=np.arange(1e-2,30,1e-2), ax=None, color='b', label=None):
+    n_exps = np.zeros_like(rs)
+    for i, r in enumerate(rs):
+        n_exps[i] = get_n_expected(pbh, t_window, r)
+    if ax is None:
+        fig = plt.figure()
+        ax = plt.subplot(111)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_xlabel('Distance (pc)')
+        ax.set_ylabel('N_expected')
+    ax.plot(rs, n_exps, color=color, label=label)
+    return ax
+
+def plot_n_expected3(pbh, t_window, rs=np.arange(1e-2,30,1e-2), ax=None, color='b', label=None):
+    n_exps = np.zeros_like(rs)
+    for i, r in enumerate(rs):
+        n_exps[i] = get_n_expected(pbh, t_window, r)
+    if ax is None:
+        fig = plt.figure()
+        ax = plt.subplot(111)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_xlabel(r'Volume (pc$^3$)')
+        ax.set_ylabel('N_expected')
+    ax.plot(4./3.*np.pi*rs**3, n_exps, color=color, label=label)
+    return ax
+
+def plot_n_expected_all(pbh, t_windows, rs=np.arange(1e-2,30,1e-2), ax=None, colors=None, labels=None, show=True, save=None):
+    if ax is None:
+        fig = plt.figure()
+        ax = plt.subplot(111)
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_xlabel('Distance (pc)')
+        ax.set_ylabel('N_expected')
+    for i, t in enumerate(t_windows):
+        if labels is not None:
+            l = labels[i]
+        else:
+            l = None
+        if colors is not None:
+            plot_n_expected(pbh, t, rs=rs, ax=ax, color=colors[i], label=l)
+        else:
+            plot_n_expected(pbh, t, rs=rs, ax=ax, label=label)
+    plt.legend(loc='best')
+    if save is not None:
+        plt.savefig(save, dpi=300)
+    if show:
+        plt.show()
+
+
 def combine_from_pickle_list(listname, window_size, filetag=""):
     pbhs_combined_all_ = combine_pbhs_from_pickle_list(listname)
     print("Total exposure time is %.2f hrs" % (pbhs_combined_all_.total_time_year*365.25*24))
@@ -1899,6 +1971,35 @@ def process_one_run(run, window_size, rho_dots=np.arange(0., 3.e5, 100), plot=Fa
 def ll(n_on, n_off, n_expected):
         #eq 8.13 without the sum
         return -2. * (-1. * n_expected + n_on * np.log(n_off + n_expected))
+
+def get_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0):
+    #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
+    n_expected = 0.9 * rho_dot * total_time_year * Veff
+    return ll(n_on, n_off, n_expected)
+
+def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=range(2,11), lss=['-', '--', ':'], cs=['r', 'b', 'k'],
+              draw_grid=True, filename="ll.png", verbose=True):
+    for i, window_ in enumerate(window_sizes):
+        lls = np.zeros_like(burst_sizes)
+        if total_time_year is None:
+            total_time_year = pbh.total_time_year
+        Veffs=[]
+        for i, b in enumerate(burst_sizes):
+            Veff = pbh.V_eff(b, window_)
+            Veffs.append(Veff)
+            lls[i] = get_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0)
+            if verbose:
+                print("log likelihood for burst size %d, 0 ON and 0 OFF is %.5f" % (b, lls[i]))
+        plt.plot(burst_sizes, lls, color=cs[i], ls=lss[i], label=("search window %d s" % window_))
+    if draw_grid:
+        plt.grid(b=True)
+    plt.yscale('log')
+    plt.xlabel("burst size")
+    plt.ylabel(r"log likelihood (-2lnL)")
+    plt.legend(loc='best')
+    if filename is not None:
+        plt.savefig(filename, dpi=300)
+    plt.show()
 
 def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
     list_df = pd.read_csv(list_of_pbhs_pickle, header=None)
