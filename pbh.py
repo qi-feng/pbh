@@ -750,7 +750,7 @@ class Pbh(object):
         for i in range(n_scramble):
             #bkg_burst_hist = pbh.estimate_bkg_burst(window_size=window_size)
             if method == "scramble":
-                self.scramble(copy=copy, all=all)
+                self.scramble(copy=copy, all_events=all)
             elif method == "rando":
                 self.t_rando(copy=copy, rate=rando_method)
             bkg_burst_hist, bkg_burst_dict = self.search_time_window(window_size=window_size, verbose=verbose)
