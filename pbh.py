@@ -1317,7 +1317,8 @@ class Pbh_combined(Pbh):
             if burst_size >= burst_size_threshold:
                 #Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
                 #print("Burst size %d " % burst_size)
-                Veff_ = self.effective_volumes[burst_size]
+                #Veff_ = self.effective_volumes[burst_size]
+                Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
                 n_expected_ = self.n_excess(rho_dot, Veff_, verbose=verbose)
                 if burst_size not in self.sig_burst_hist:
                     self.sig_burst_hist[burst_size] = 0
