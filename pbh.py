@@ -896,9 +896,13 @@ class Pbh(object):
             print("Overall Significance is %d" % significance)
         return significance
 
-    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
+    #def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
+    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=100):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
-        all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+        if upper_burst_size is None:
+            all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+        else:
+            all_burst_sizes = range(burst_size_threshold,upper_burst_size+1)
         ll_ = 0.0
         for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
@@ -921,18 +925,19 @@ class Pbh(object):
             print("###############################################################################")
         return ll_
 
-    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False):
+    #def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False, upper_burst_size=None):
+    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False, upper_burst_size=100):
         #plot a vertical slice of Fig 8-4, for a given burst size and search window, scan through rho_dot and plot -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
         lls_ = np.zeros(rho_dots.shape[0])
         for i, rho_dot_ in enumerate(rho_dots):
-            lls_[i] = self.get_ll(rho_dot_, burst_size_thresh, t_window, verbose=verbose)
+            lls_[i] = self.get_ll(rho_dot_, burst_size_thresh, t_window, verbose=verbose, upper_burst_size=upper_burst_size)
         return rho_dots, lls_
 
     @autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       verbose=False):
+                       verbose=False, upper_burst_size=None):
         #search rho_dots for the minimum -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
@@ -942,7 +947,7 @@ class Pbh(object):
             lls_ = np.zeros(rho_dots.shape[0])
         i=0
         for rho_dot_ in rho_dots:
-            ll_ = self.get_ll(rho_dot_, burst_size, t_window, verbose=verbose)
+            ll_ = self.get_ll(rho_dot_, burst_size, t_window, verbose=verbose, upper_burst_size=upper_burst_size)
             if ll_ < min_ll_:
                 min_ll_ = ll_
                 rho_dot_min_ll_ = rho_dot_
@@ -1024,10 +1029,10 @@ class Pbh(object):
             sig_err = np.zeros(np.array(self.sig_burst_hist.values()).shape[0])
             bkg_err = np.zeros(np.array(self.avg_bkg_hist.values()).hape[0])
         elif error=="Poisson":
-            sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float'))
-            bkg_err = np.sqrt(np.array(self.avg_bkg_hist.values()).astype('float'))
+            sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float64'))
+            bkg_err = np.sqrt(np.array(self.avg_bkg_hist.values()).astype('float64'))
         elif error.lower()=="std":
-            sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float'))
+            sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float64'))
             all_bkg_burst_sizes = set(k for dic in self.bkg_burst_hists for k in dic.keys())
             bkg_err = np.zeros(sig_err.shape[0])
             for key_ in all_bkg_burst_sizes:
@@ -1301,9 +1306,12 @@ class Pbh_combined(Pbh):
         return n_ex
 
     #Override get_ll so that it knows where to find the effective volume
-    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False):
+    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
-        all_burst_sizes = self.get_all_burst_sizes()
+        if upper_burst_size is None:
+            all_burst_sizes = self.get_all_burst_sizes()
+        else:
+            all_burst_sizes = range(burst_size_threshold,upper_burst_size+1)
         ll_ = 0.0
         for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
@@ -1330,17 +1338,17 @@ class Pbh_combined(Pbh):
 
     @autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       verbose=False):
+                       verbose=False, upper_burst_size=None):
         #search rho_dots for the minimum -2lnL for burst size >= burst_size
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
         min_ll_ = 1.e5
         rho_dot_min_ll_ = -1.0
         if return_arrays:
-            lls_ = np.zeros(rho_dots.shape[0]).astype('float32')
+            lls_ = np.zeros(rho_dots.shape[0]).astype('float64')
         i=0
         for rho_dot_ in rho_dots:
-            ll_ = self.get_ll(rho_dot_, burst_size, t_window, verbose=verbose)
+            ll_ = self.get_ll(rho_dot_, burst_size, t_window, verbose=verbose, upper_burst_size=upper_burst_size)
             if ll_ < min_ll_:
                 min_ll_ = ll_
                 rho_dot_min_ll_ = rho_dot_
@@ -1764,8 +1772,8 @@ def plot_residual_vs_n_expected(pbhs, rho_dots, colors=None, draw_grid=True, yli
             print("colors provided has a different length from rho_dots!")
             colors=None
     residual_dict=pbhs.get_residual_hist()
-    sig_err = np.sqrt(np.array(pbhs.sig_burst_hist.values()).astype('float'))
-    bkg_err = np.sqrt(np.array(pbhs.avg_bkg_hist.values()).astype('float'))
+    sig_err = np.sqrt(np.array(pbhs.sig_burst_hist.values()).astype('float64'))
+    bkg_err = np.sqrt(np.array(pbhs.avg_bkg_hist.values()).astype('float64'))
     res_err = np.sqrt(sig_err**2+bkg_err**2)
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -1804,8 +1812,8 @@ def plot_residual_UL_n_expected(pbhs, rho_dots, ULs, colors=None, draw_grid=True
             print("colors provided has a different length from rho_dots!")
             colors=None
     residual_dict=pbhs.get_residual_hist()
-    sig_err = np.sqrt(np.array(pbhs.sig_burst_hist.values()).astype('float'))
-    bkg_err = np.sqrt(np.array(pbhs.avg_bkg_hist.values()).astype('float'))
+    sig_err = np.sqrt(np.array(pbhs.sig_burst_hist.values()).astype('float64'))
+    bkg_err = np.sqrt(np.array(pbhs.avg_bkg_hist.values()).astype('float64'))
     res_err = np.sqrt(sig_err**2+bkg_err**2)
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -1972,7 +1980,7 @@ def ll(n_on, n_off, n_expected):
         #eq 8.13 without the sum
         return -2. * (-1. * n_expected + n_on * np.log(n_off + n_expected))
 
-def get_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0):
+def calc_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0):
     #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
     n_expected = 0.9 * rho_dot * total_time_year * Veff
     return ll(n_on, n_off, n_expected)
@@ -1980,8 +1988,8 @@ def get_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0):
 def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=range(2,11), lss=['-', '--', ':'], cs=['r', 'b', 'k'],
               draw_grid=True, filename="ll.png", verbose=True):
     for i, window_ in enumerate(window_sizes):
-        n_exps = np.zeros_like(burst_sizes).astype('float32')
-        lls = np.zeros_like(burst_sizes).astype('float32')
+        n_exps = np.zeros_like(burst_sizes).astype('float64')
+        lls = np.zeros_like(burst_sizes).astype('float64')
         if total_time_year is None:
             total_time_year = pbh.total_time_year
         Veffs=[]
@@ -1993,11 +2001,11 @@ def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=r
             n_exps[j] = n_expected
             #print("n_expected=%.10f ll=%.10f" % (n_expected, ll(0, 0, n_expected)))
             Veffs.append(Veff)
-            lls[j] = float(get_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0))
+            lls[j] = float(calc_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0))
             #lls[j] = ll(0, 0, n_expected)
             if verbose:
                 print("Burst size %d"%b)
-                print("n_expected=%.10f ll=%.10f" % (n_expected, get_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0)))
+                print("n_expected=%.10f ll=%.10f" % (n_expected, calc_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0)))
                 print("log likelihood for burst size %d, 0 ON and 0 OFF is %.5f" % (b, lls[j]))
         plt.plot(burst_sizes, lls, color=cs[i], ls=lss[i], label=("search window %d s" % window_))
     if draw_grid:
