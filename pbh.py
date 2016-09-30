@@ -937,7 +937,8 @@ class Pbh(object):
 
     @autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       verbose=False, upper_burst_size=None):
+                       verbose=False, upper_burst_size=100):
+                       #verbose=False, upper_burst_size=None):
         #search rho_dots for the minimum -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
@@ -1306,7 +1307,8 @@ class Pbh_combined(Pbh):
         return n_ex
 
     #Override get_ll so that it knows where to find the effective volume
-    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
+    #def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
+    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=100):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
         if upper_burst_size is None:
             all_burst_sizes = self.get_all_burst_sizes()
@@ -1339,7 +1341,8 @@ class Pbh_combined(Pbh):
 
     @autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       verbose=False, upper_burst_size=None):
+                       verbose=False, upper_burst_size=100):
+                       #verbose=False, upper_burst_size=None):
         #search rho_dots for the minimum -2lnL for burst size >= burst_size
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
