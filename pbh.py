@@ -968,7 +968,7 @@ class Pbh(object):
         ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<1e-9)
         if ul_99_idx_all[0].shape[0]==0:
             print("Can't find 99% UL!")
-            raise
+            exit(1)
         elif ul_99_idx_all[0].shape[0]>1:
             print("More than one 99% UL found, strange!")
             print("These are rho_dot = %s, and -2lnL = %s" % (rho_dots[ul_99_idx_all], lls_[ul_99_idx_all]))
