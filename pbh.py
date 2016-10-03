@@ -1363,8 +1363,10 @@ class Pbh_combined(Pbh):
             return rho_dot_min_ll_, min_ll_, rho_dots, lls_
         return rho_dot_min_ll_, min_ll_
 
-    def get_ULs(self, burst_size_threshold=2, rho_dots=self.rho_dots, upper_burst_size=100):
+    def get_ULs(self, burst_size_threshold=2, rho_dots=None, upper_burst_size=100):
         print("Getting UL for burst size above %d..." % burst_size_threshold)
+        if rho_dots is None:
+            rho_dots = self.rho_dots
         minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(burst_size_threshold, self.window_size,
                                                                          rho_dots=rho_dots, verbose=self.verbose,
                                                                          upper_burst_size=upper_burst_size)
