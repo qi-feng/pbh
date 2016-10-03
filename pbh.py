@@ -959,13 +959,13 @@ class Pbh(object):
             return rho_dot_min_ll_, min_ll_, rho_dots, lls_
         return rho_dot_min_ll_, min_ll_
 
-    def get_ul_rho_dot(self, rho_dots, lls_, min_ll_):
+    def get_ul_rho_dot(self, rho_dots, lls_, min_ll_, margin=1.e-5):
         """
         # lls_ is the **SUM** of -2lnL from *ALL* burst sizes
         """
         ll_99 = 6.63
         ul_99_idx = (np.abs(lls_-min_ll_-ll_99)).argmin()
-        ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<1e-9)
+        ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<margin)
         if ul_99_idx_all[0].shape[0]==0:
             print("Can't find 99% UL!")
             sys.exit(1)
@@ -1363,11 +1363,13 @@ class Pbh_combined(Pbh):
             return rho_dot_min_ll_, min_ll_, rho_dots, lls_
         return rho_dot_min_ll_, min_ll_
 
-    def get_ULs(self, burst_size_threshold=2):
+    def get_ULs(self, burst_size_threshold=2, rho_dots=self.rho_dots, upper_burst_size=100):
         print("Getting UL for burst size above %d..." % burst_size_threshold)
-        minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(burst_size_threshold, self.window_size, rho_dots=self.rho_dots, verbose=self.verbose)
+        minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(burst_size_threshold, self.window_size,
+                                                                         rho_dots=rho_dots, verbose=self.verbose,
+                                                                         upper_burst_size=upper_burst_size)
         self.minimum_lls[burst_size_threshold] = minimum_ll
-        self.rho_dot_ULs[burst_size_threshold], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll)
+        self.rho_dot_ULs[burst_size_threshold], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll, margin=1.e-5)
         return self.rho_dot_ULs
 
     def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True, show=False):
