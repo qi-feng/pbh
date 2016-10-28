@@ -17,20 +17,24 @@ def gaus(x, *p):
     A, mu, sigma = p
     return A*np.exp(-(x-mu)**2/(2.*sigma**2))
 
-def poisson_pdf(x, u):
+def poisson_pdf(x, u, log=False):
     """
     The probability of observing x events given the expected number of events is u
     """
     #return np.exp(-u)*(u**x)/factorial(x)
     #return np.exp(-u)*(u**x)/gamma(x+1)
+    if log:
+        return poisson.logpmf(x, u)
     return poisson.pmf(x, u)
 
-def counting_pdf(x, y, u, b, tau=1):
+def counting_pdf(x, y, u, b, tau=1, log=False):
     """
     Given the expected signal u and expected bkg b,
     the Poisson probability of observing x ON events and y OFF events.
     Note alpha is 1 here.
     """
+    if log:
+        return (poisson_pdf(x, u+b, log=True))+(poisson_pdf(y, tau*b, log=True))
     return poisson_pdf(x, u+b)*poisson_pdf(y, tau*b)
 
 def likeihood_ratio(u, x, y, tau=1):

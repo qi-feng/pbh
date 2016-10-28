@@ -964,11 +964,15 @@ class Pbh(object):
         # lls_ is the **SUM** of -2lnL from *ALL* burst sizes
         """
         ll_99 = 6.63
+        rho_dots99 = np.interp(0.0, lls_-min_ll_-ll_99, rho_dots)
+        if abs(np.interp(rho_dots99, rho_dots, lls_-min_ll_-ll_99)) <= margin:
+            return rho_dots99, 0
         ul_99_idx = (np.abs(lls_-min_ll_-ll_99)).argmin()
         ul_99_idx_all = np.where(abs(lls_-lls_[ul_99_idx])<margin)
         if ul_99_idx_all[0].shape[0]==0:
             print("Can't find 99% UL!")
-            sys.exit(1)
+            return None
+            #sys.exit(1)
         elif ul_99_idx_all[0].shape[0]>1:
             print("More than one 99% UL found, strange!")
             print("These are rho_dot = %s, and -2lnL = %s" % (rho_dots[ul_99_idx_all], lls_[ul_99_idx_all]))
@@ -1916,7 +1920,7 @@ def plot_n_expected_all(pbh, t_windows, rs=np.arange(1e-2,30,1e-2), ax=None, col
         if colors is not None:
             plot_n_expected(pbh, t, rs=rs, ax=ax, color=colors[i], label=l)
         else:
-            plot_n_expected(pbh, t, rs=rs, ax=ax, label=label)
+            plot_n_expected(pbh, t, rs=rs, ax=ax, label=l)
     plt.legend(loc='best')
     if save is not None:
         plt.savefig(save, dpi=300)
