@@ -13,6 +13,7 @@ import tables
 from optparse import OptionParser
 
 import sys
+import socket
 
 sys.setrecursionlimit(50000)
 
@@ -2049,7 +2050,7 @@ def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
     return pbhs_combined
 
 def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
-                     script_dir = '/raid/reedbuck/qfeng/pbh/', overwrite=True):
+                     script_dir = '/raid/reedbuck/qfeng/pbh/', overwrite=True, hostname=None):
     print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     #script_dir = '/raid/reedbuck/qfeng/pbh/'
@@ -2057,6 +2058,8 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
     runlist_df = pd.read_csv(filename, header=None)
     runlist_df.columns = ["runNum"]
     runlist = runlist_df.runNum.values
+    if hostname is None:
+        hostname = socket.gethostname()
     for run_num in runlist:
         try:
             pyscriptname = "pbh.py"
@@ -2086,7 +2089,9 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
                 else:
                     script.write('python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
             script.close()
-            isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
+            #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
+            isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
+
             print(isend_command)
             os.system(isend_command)
             print("Run %d sent to queue." % run_num)
