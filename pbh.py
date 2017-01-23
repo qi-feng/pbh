@@ -6,13 +6,19 @@ import pandas as pd
 from scipy.optimize import curve_fit, minimize
 from scipy import stats
 import random
-import cPickle as pickle
+
+import sys
+if (sys.version_info > (3, 0)):
+     # Python 3 code in this block
+     import _pickle as pickle
+else:
+     # Python 2 code in this block
+     import cPickle as pickle
 from scipy.special import gamma
 from math import factorial
 import tables
 from optparse import OptionParser
 
-import sys
 import socket
 
 sys.setrecursionlimit(50000)
@@ -45,7 +51,7 @@ class Pbh(object):
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
-        self.psf_lookup = np.zeros((4, 3))
+        self.psf_lookup = np.zeros((4, 3)).astype('float')
         self.E_grid = np.array([0.08, 0.32, 0.5, 1.0, 50.0])
         self.EL_grid = np.array([50.0, 70.0, 80., 90.])
         # for later reference
@@ -291,9 +297,9 @@ class Pbh(object):
 
     @autojit
     def psf_func(self, theta2, psf_width, N=100):
-        return 1.71 * N / 2. / np.pi / psf_width ** 2 / np.cosh(np.sqrt(theta2) / psf_width)
+        return 1.7142 * N / 2. / np.pi / (psf_width ** 2) / np.cosh(np.sqrt(theta2) / psf_width)
         # equivalently:
-        #return (stats.hypsecant.pdf(np.sqrt(theta2s)/psf_width)*1.71/2./psf_width**2)
+        #return (stats.hypsecant.pdf(np.sqrt(theta2s)/psf_width)*1.7142/2./psf_width**2)
 
     def psf_cdf(self, psf_width, fov=1.75):
         """
@@ -392,8 +398,9 @@ class Pbh(object):
         ll = 0
         dists = self.get_all_angular_distance(coords, cent_coord)
         theta2s = dists ** 2
+        #ll = -2.* np.log(  1.7142 * N / 2. / np.pi / (psf_width ** 2) / np.cosh(np.sqrt(theta2) / psf_width)  )
         ll = -2. * np.sum(np.log(psfs)) + np.sum(np.log(1. / np.cosh(np.sqrt(theta2s) / psfs)))
-        ll += psfs.shape[0] * np.log(1.71 / np.pi)
+        ll += psfs.shape[0] * np.log(1.7142 / np.pi)
         ll = -2. * ll
         #return ll
         #Normalized by the number of events!
@@ -478,6 +485,7 @@ class Pbh(object):
                 previous_window_start = t
                 previous_window_end = t + window_size
             else:
+                #below just see if there are new events in the extra time interval after the previous_window_end
                 new_event_slice_tuple = np.where((self.photon_df.ts >= previous_window_end) & (self.photon_df.ts < (t + window_size)))
                 previous_window_start = t
                 previous_window_end = t + window_size
@@ -517,6 +525,7 @@ class Pbh(object):
             slice_index = tuple(slice_index[:, np.newaxis].T)
 
             _N = self.photon_df.ts.values[slice_index].shape[0]
+            #sanity check
             if _N < 1:
                 #All events are singlet, removed all
                 if verbose:
@@ -546,7 +555,7 @@ class Pbh(object):
                 #self.photon_df.at[outlier_events[0], 'burst_sizes'] = 1
                 continue
             else:
-                #If there is a burst of a subset of events, it's been taken care of, now take care of the outlier slice
+                #If there is a burst of a subset of events, it's been taken care of, now take care of the outlier slice (which has >1 events reaching here)
                 outlier_burst_events, outlier_of_outlier_events = self.search_event_slice(outlier_events)
 
                 while outlier_of_outlier_events is not None:
@@ -1569,7 +1578,67 @@ def test_psf_func_sim(psf_width=0.05, prob="psf", Nsim=10000, Nbins=40, filename
     plt.show()
 
 
-def test_sim_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
+def calc_cut_sig(ll_sig_all, ll_bkg_all, ll_cut, upper=True):
+    ll_sig_all = np.array(ll_sig_all)
+    ll_bkg_all = np.array(ll_bkg_all)
+    if upper:
+        s = float((ll_sig_all <= ll_cut).sum())
+        b = float((ll_bkg_all <= ll_cut).sum())
+    else:
+        s = float((ll_sig_all >= ll_cut).sum())
+        b = float((ll_bkg_all >= ll_cut).sum())
+    sig = 1.0 * s / np.sqrt(s + b)
+    return sig
+
+
+def cut_optimize(ll_sig_all, ll_bkg_all, ll_cuts, upper=True, plot=True, outfile=None,
+                 label="Burst size 3", sig_bins=50, bkg_bins=100, ylog=True):
+    sigs = np.zeros_like(ll_cuts).astype('float')
+    for i, c in enumerate(ll_cuts):
+        sig = calc_cut_sig(ll_sig_all, ll_bkg_all, c, upper=upper)
+        sigs[i] = sig
+    if plot:
+        plt.plot(ll_cuts, sigs, color='g', label=str(label) + " SNR")
+        plt.hist(ll_sig_all, bins=sig_bins, color='r', alpha=0.3, label=str(label) + " signal")
+        plt.hist(ll_bkg_all, bins=bkg_bins, color='b', alpha=0.3, label=str(label) + " background")
+        best_cut = ll_cuts[np.where(sigs == np.max(np.nan_to_num(sigs)))]
+        plt.axvline(x=best_cut[0], ls="--", lw=0.3, label="Best cut {:.2f}".format(best_cut[0]))
+        plt.axhline(y=sigs[np.where(sigs == np.max(np.nan_to_num(sigs)))][0], ls="--", lw=0.3)
+
+        plt.legend(loc='best')
+        plt.xlabel("Likelihood")
+        if ylog:
+            plt.yscale('log')
+        if outfile is not None:
+            plt.savefig(outfile)
+        plt.show()
+    return (sigs, best_cut[0])
+
+
+def cut_90efficiency(ll_sig_all, ll_bkg_all, ll_cuts, upper=True, plot=True, outfile=None,
+                     label="Burst size 3", sig_bins=50, bkg_bins=100, ylog=True):
+    # for i, c in enumerate(ll_cuts):
+    #    sig = calc_cut_sig(ll_sig_all, ll_bkg_all, c, upper=upper)
+    #    sigs[i] = sig
+    if plot:
+        # plt.plot(ll_cuts, sigs, color='g', label=str(label) + " SNR")
+        plt.hist(ll_sig_all, bins=sig_bins, color='r', alpha=0.3, label=str(label) + " signal")
+        plt.hist(ll_bkg_all, bins=bkg_bins, color='b', alpha=0.3, label=str(label) + " background")
+        # ll_sig_all = np.nan_to_num(ll_sig_all)
+        best_cut = np.percentile(ll_sig_all, 90)
+        plt.axvline(x=best_cut, ls="--", lw=0.3, label="90% efficiency cut {:.2f}".format(best_cut))
+        # plt.axhline(y=sigs[np.where(ll_sig_all==best_cut)][0], ls="--", lw=0.3)
+
+        plt.legend(loc='best')
+        plt.xlabel("Likelihood")
+        if ylog:
+            plt.yscale('log')
+        if outfile is not None:
+            plt.savefig(outfile)
+        plt.show()
+    return best_cut
+
+def sim_psf_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
     pbh = Pbh()
     fov_center = np.array([180., 30.0])
     fov = 1.75
@@ -1605,7 +1674,12 @@ def test_sim_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bi
         cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
         ll_bkg_all[j] = ll_bkg
         ll_sig_all[j] = ll_sig
+    return ll_sig_all, ll_bkg_all
 
+
+
+def test_sim_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
+    ll_sig_all, ll_bkg_all = sim_psf_likelihood(Nsim=Nsim, N_burst=N_burst, filename=filename, sig_bins=sig_bins, bkg_bins=bkg_bins, ylog=ylog)
     plt.hist(ll_sig_all, bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
     plt.hist(ll_bkg_all, bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
     plt.axvline(x=-9.5, ls="--", lw=0.3)
@@ -1617,6 +1691,50 @@ def test_sim_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bi
         plt.savefig(filename)
     plt.show()
     return pbh
+
+def opt_cut(Nsim=10000, N_burst=3):
+    #optimize cuts based on Monte Carlo, maximizing significance
+    ll_sig_all, ll_bkg_all = sim_psf_likelihood(Nsim=Nsim, N_burst=N_burst, filename=None, sig_bins=50, bkg_bins=100, ylog=True)
+    ll_cuts=np.arange(-15,40,0.1)
+    sigs, best_cut = cut_optimize(ll_sig_all, ll_bkg_all, ll_cuts,
+                                  label="Burst size "+str(N_burst),
+                                  outfile="psf_likelihood_cut_optimization_sim"+str(Nsim)+"_burst_size"+str(N_burst)+".png")
+    return best_cut
+
+def eff_cut(Nsim=10000, N_burst=3):
+    #find 90% efficiency cuts
+    ll_sig_all, ll_bkg_all = sim_psf_likelihood(Nsim=Nsim, N_burst=N_burst, filename=None, sig_bins=50, bkg_bins=100, ylog=True)
+    ll_cuts=np.arange(-15,40,0.1)
+    best_cut = cut_90efficiency(ll_sig_all, ll_bkg_all, ll_cuts,
+                                  label="Burst size "+str(N_burst),
+                                  outfile="psf_likelihood_cut_90efficiency_sim"+str(Nsim)+"_burst_size"+str(N_burst)+".png")
+    return best_cut
+
+def sim_cut_90efficiency(NMC=50, Nsim=2000, N_burst=3, upper=True, plot=False, outfile=None,
+                         cut_bins=50, ylog=False):
+    cuts = np.zeros(NMC).astype('float')
+    for trial in range(NMC):
+        ll_sig_all, ll_bkg_all = sim_psf_likelihood(Nsim=Nsim, N_burst=N_burst, filename=None, sig_bins=50, bkg_bins=100, ylog=True)
+        ll_cuts=np.arange(-15,40,0.1)
+        label="Burst size "+str(N_burst)
+        #for i, c in enumerate(ll_cuts):
+        #    sig = calc_cut_sig(ll_sig_all, ll_bkg_all, c, upper=upper)
+        #    sigs[i] = sig
+        best_cut = np.percentile(ll_sig_all, 90)
+        cuts[trial] = best_cut
+    if plot:
+        plt.hist(cuts, bins=cut_bins, color='r', alpha=0.3, label=str(label) + " sim cuts")
+        #plt.axvline(x=best_cut, ls="--", lw=0.3, label="90% efficiency cut {:.2f}".format(best_cut))
+        plt.legend(loc='best')
+        plt.xlabel("Likelihood")
+        if ylog:
+            plt.yscale('log')
+        if outfile is not None:
+            plt.savefig(outfile)
+        plt.show()
+    return cuts
+
+
 
 
 def test_burst_finding(window_size=3, runNum=55480, nlines=None, N_scramble=3, plt_log=True, verbose=False,
@@ -1957,12 +2075,12 @@ def comp_pbhs(pbhs1, pbhs2):
         print("Same sig_burst_hist")
     else:
         print("*** Different sig_burst_hist! ***")
-        print pbhs1.sig_burst_hist, pbhs2.sig_burst_hist
+        print("{0}, {1}".format(pbhs1.sig_burst_hist, pbhs2.sig_burst_hist))
     if pbhs1.avg_bkg_hist==pbhs2.avg_bkg_hist:
         print("Same avg_bkg_hist")
     else:
         print("*** Different avg_bkg_hist! ***")
-        print pbhs1.avg_bkg_hist, pbhs2.avg_bkg_hist
+        print("{0}, {1}".format(pbhs1.avg_bkg_hist, pbhs2.avg_bkg_hist))
     if pbhs1.window_size==pbhs2.window_size:
         print("Same window_size")
     else:
