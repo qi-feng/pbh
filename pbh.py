@@ -47,7 +47,10 @@ class Pbh(object):
     # Class for one run
     def __init__(self):
         # the cut on -2lnL, consider smaller values accepted for events coming from the same centroid
-        self.ll_cut = -9.5
+        # selected based on sims at 90% efficiency
+        #self.ll_cut = -9.5
+        self.ll_cut = -9.1
+        self.ll_cut_dict = {2:-9.11,3:-9.00,4:-9.01, 5:-9.06, 6:-9.12, 7:-9.16, 8:-9.19, 9:-9.21, 10:-9.25}
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
@@ -432,7 +435,12 @@ class Pbh(object):
             #one event:
             return coords, 1, np.array([1])
         centroid, ll_centroid = self.minimize_centroid_ll(coords, psfs)
-        if ll_centroid <= self.ll_cut:
+        if slice_index.shape[0] in self.ll_cut_dict.keys():
+            psf_ll_cut=self.ll_cut_dict[slice_index.shape[0]]
+        else:
+            psf_ll_cut=self.ll_cut
+        #if ll_centroid <= self.ll_cut:
+        if ll_centroid <= psf_ll_cut:
             # likelihood passes cut
             # all events with slice_index form a burst candidate
             return centroid, ll_centroid, slice_index
