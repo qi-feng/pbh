@@ -1698,7 +1698,7 @@ def test_sim_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bi
     if filename is not None:
         plt.savefig(filename)
     plt.show()
-    return pbh
+    return None
 
 def opt_cut(Nsim=10000, N_burst=3):
     #optimize cuts based on Monte Carlo, maximizing significance
@@ -2158,6 +2158,147 @@ def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=r
         plt.savefig(filename, dpi=300)
     plt.show()
     return lls, n_exps
+
+
+def compare_run(runid, window_size=10, outfile=None, ylog=True, pkldir="batch_all_scramble_all_events", show=True):
+    # compare burst histograms with Simon's
+    if window_size==1:
+        test_pbh = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window1.0-s.pkl")
+        tp = test_pbh.pbhs[0]
+    elif window_size==2:
+        test_pbh2 = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window2.0-s.pkl")
+        tp = test_pbh2.pbhs[0]
+    elif window_size==5:
+        test_pbh5 = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window5.0-s.pkl")
+        tp = test_pbh5.pbhs[0]
+    elif window_size==10:
+        test_pbh10 = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window10.0-s.pkl")
+        tp = test_pbh10.pbhs[0]
+
+
+
+    fname="/raid/reedbuck/archs/PBHAnalysis_cori/MoreFinalResults/run_"+str(runid)+"_burst.root"
+
+    rf=ROOT.TFile(fname, "read")
+    if window_size==1:
+        h10b = rf.Get("1.0-second_run_" + str(runid) + "_Background");
+        h10 = rf.Get("1.0-second_run_" + str(runid) + "_Data");
+    elif window_size == 2:
+        h10b = rf.Get("2.0-second_run_" + str(runid) + "_Background");
+        h10 = rf.Get("2.0-second_run_" + str(runid) + "_Data");
+    elif window_size == 5:
+        h10b = rf.Get("5.0-second_run_" + str(runid) + "_Background");
+        h10 = rf.Get("5.0-second_run_" + str(runid) + "_Data");
+    elif window_size == 10:
+        h10b=rf.Get("10.0-second_run_"+str(runid)+"_Background");
+        h10=rf.Get("10.0-second_run_"+str(runid)+"_Data");
+
+    x=np.zeros(6)
+    y=np.zeros(6)
+    dy=np.zeros(6)
+
+    xB=np.zeros(6)
+    yB=np.zeros(6)
+    dyB=np.zeros(6)
+
+    for i in range(6):
+        xB[i]=h10b.GetBinCenter(i+1)
+        yB[i]=h10b.GetBinContent(i+1)
+        dyB[i]=h10b.GetBinError(i+1)
+        x[i] = h10.GetBinCenter(i + 1)
+        y[i] = h10.GetBinContent(i + 1)
+        dy[i] = h10.GetBinError(i + 1)
+
+
+    plt.errorbar(x, y, xerr=0.5, yerr=dy, label="Simon's signal",
+                 fmt='v', color='r', ecolor='r', capthick=0)
+    plt.errorbar(xB, yB, xerr=0.5, yerr=dyB, label="Simon's background",
+                 fmt='<', color='b', ecolor='b', capthick=0)
+    plt.errorbar(tp.sig_burst_hist.keys(), tp.sig_burst_hist.values(),
+                 xerr=0.5, yerr=np.sqrt(np.array(tp.sig_burst_hist.values())), label="Qi's signal",
+                 fmt='^', color='c', ecolor='c', capthick=0)
+    plt.errorbar(tp.avg_bkg_hist.keys(), tp.avg_bkg_hist.values(),
+                 xerr=0.5, yerr=np.sqrt(np.array(tp.avg_bkg_hist.values())), label="Qi's background",
+                 fmt='>', color='m', ecolor='m', capthick=0)
+    plt.title("run "+str(runid)+" "+str(window_size)+"-s window")
+    plt.xlabel("Burst size")
+    plt.ylabel("Counts")
+    if ylog:
+        plt.yscale('log')
+    plt.legend()
+    if outfile is not None:
+        plt.savefig(outfile, dpi=300)
+    if show:
+        plt.show()
+    else:
+        plt.clf()
+
+
+def compare_run_ratio(runid, window_size=10, outfile=None, ylog=True, pkldir="batch_all_scramble_all_events", show=True):
+    if window_size==1:
+        test_pbh = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window1.0-s.pkl")
+        tp = test_pbh.pbhs[0]
+    elif window_size==2:
+        test_pbh2 = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window2.0-s.pkl")
+        tp = test_pbh2.pbhs[0]
+    elif window_size==5:
+        test_pbh5 = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window5.0-s.pkl")
+        tp = test_pbh5.pbhs[0]
+    elif window_size==10:
+        test_pbh10 = load_pickle(pkldir+"/pbhs_bkg_method_scramble_run"+str(runid)+"_window10.0-s.pkl")
+        tp = test_pbh10.pbhs[0]
+
+
+
+    fname="/raid/reedbuck/archs/PBHAnalysis_cori/MoreFinalResults/run_"+str(runid)+"_burst.root"
+
+    rf=ROOT.TFile(fname, "read")
+    if window_size==1:
+        h10b = rf.Get("1.0-second_run_" + str(runid) + "_Background");
+        h10 = rf.Get("1.0-second_run_" + str(runid) + "_Data");
+    elif window_size == 2:
+        h10b = rf.Get("2.0-second_run_" + str(runid) + "_Background");
+        h10 = rf.Get("2.0-second_run_" + str(runid) + "_Data");
+    elif window_size == 5:
+        h10b = rf.Get("5.0-second_run_" + str(runid) + "_Background");
+        h10 = rf.Get("5.0-second_run_" + str(runid) + "_Data");
+    elif window_size == 10:
+        h10b=rf.Get("10.0-second_run_"+str(runid)+"_Background");
+        h10=rf.Get("10.0-second_run_"+str(runid)+"_Data");
+
+    x=np.zeros(6)
+    y=np.zeros(6)
+    dy=np.zeros(6)
+
+    xB=np.zeros(6)
+    yB=np.zeros(6)
+    dyB=np.zeros(6)
+
+    for i in range(6):
+        xB[i]=h10b.GetBinCenter(i+1)
+        yB[i]=h10b.GetBinContent(i+1)
+        dyB[i]=h10b.GetBinError(i+1)
+        x[i] = h10.GetBinCenter(i + 1)
+        y[i] = h10.GetBinContent(i + 1)
+        dy[i] = h10.GetBinError(i + 1)
+
+
+    plt.errorbar(x, y*1.0/tp.sig_burst_hist.values(), xerr=0.5, yerr=np.sqrt(dy**2+np.array(tp.sig_burst_hist.values())), label="Ratio of signals",
+                 fmt='v', color='r', ecolor='r', capthick=0)
+    plt.errorbar(xB, yB*1.0/tp.avg_bkg_hist.values(), xerr=0.5, yerr=np.sqrt(dyB**2+np.array(tp.avg_bkg_hist.values())), label="Ratio of background",
+                 fmt='<', color='b', ecolor='b', capthick=0)
+    plt.title("run "+str(runid)+" "+str(window_size)+"-s window")
+    plt.xlabel("Burst size")
+    plt.ylabel("Simon's Counts / Qi's Counts")
+    if ylog:
+        plt.yscale('log')
+    plt.legend()
+    if outfile is not None:
+        plt.savefig(outfile, dpi=300)
+    if show:
+        plt.show()
+    else:
+        plt.clf()
 
 
 def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
