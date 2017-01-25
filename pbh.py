@@ -2055,10 +2055,10 @@ def plot_n_expected_all(pbh, t_windows, rs=np.arange(1e-2,30,1e-2), ax=None, col
         plt.show()
 
 
-def combine_from_pickle_list(listname, window_size, filetag=""):
+def combine_from_pickle_list(listname, window_size, filetag="", burst_size_threshold=2, rho_dots=None, upper_burst_size=100):
     pbhs_combined_all_ = combine_pbhs_from_pickle_list(listname)
     print("Total exposure time is %.2f hrs" % (pbhs_combined_all_.total_time_year*365.25*24))
-    pbhs_combined_all_.get_ULs()
+    pbhs_combined_all_.get_ULs(burst_size_threshold=burst_size_threshold, rho_dots=rho_dots, upper_burst_size=upper_burst_size)
     print("The effective volume above burst size 2 is %.6f pc^3" % (pbhs_combined_all_.effective_volumes[2]))
     print("There are %d runs in total" % (len(pbhs_combined_all_.runNums)))
     total_N_runs = len(pbhs_combined_all_.runNums)
