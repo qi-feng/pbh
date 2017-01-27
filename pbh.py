@@ -2348,7 +2348,7 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
             with open(scriptfullname, 'w') as script:
                 script.write('#PBS -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
                 script.write('#PBS -o %s\n'%os.path.join(script_dir, 'qsub_%s.log'%scriptname))
-                script.write('#PBS -l walltime=24:00:00\n')
+                script.write('#PBS -l walltime=120:00:00\n')
                 script.write('#PBS -l pvmem=5gb\n')
                 script.write('cd %s\n'%script_dir)
                 if plot:
