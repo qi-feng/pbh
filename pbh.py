@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.optimize import curve_fit, minimize
 from scipy import stats
 import random
+import shutil
 
 import sys
 if (sys.version_info > (3, 0)):
@@ -2365,6 +2366,32 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
         except:
             print("*** Can't process run: %d ***" % run_num)
             raise
+
+def jackknife_runlist(runlist="pbh_1-s_scramble_all_90eff_list.txt", num_samples=5, run=True, window_size=1,
+                      filetag="scramble_all_90eff", upper_burst_size=None, start_subsample=0):
+    rlist=[]
+    nline=0
+    with open(runlist, 'r') as f:
+        for line in f:
+            rlist.append(line)
+            nline+=1
+
+    #chunk_length = nline//num_samples*(num_samples-1)
+    for i in range(start_subsample, num_samples):
+        outfilename = 'file'+str(i)+'out_of'+str(num_samples)+runlist
+        outfile = open(outfilename, 'w')
+        subsample = [x for k, x in enumerate(rlist) if k % num_samples != i]
+        #outfile.write("".join(rlist[chunk_length*i:chunk_length*(i+1)]))
+        outfile.write("".join(subsample))
+        outfile.close()
+        chunk_length = len(subsample)
+
+        if run:
+            pbhs_combined_cv = combine_from_pickle_list(outfilename, window_size,
+                                                            filetag=filetag+'_'+str(i)+'out_of'+str(num_samples), upper_burst_size=upper_burst_size)
+            shutil.copyfile('pbhs_combined_window'+str("{:.1f}".format(window_size))+'-s_'+str(chunk_length)+'runs.pkl',
+                            'pbhs_combined_window'+str("{:.1f}".format(window_size))+'-s_'+str(chunk_length)+'runs_sub'+str(i)+'.pkl')
+            print("Final UL is {0}".format(pbhs_combined_cv.rho_dot_ULs))
 
 
 if __name__ == "__main__":
