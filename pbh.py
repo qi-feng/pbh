@@ -2318,7 +2318,7 @@ def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
     return pbhs_combined
 
 def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
-                     script_dir = '/raid/reedbuck/qfeng/pbh/', overwrite=True, hostname=None):
+                     script_dir = '/raid/reedbuck/qfeng/pbh/', overwrite=True, hostname=None, walltime=48):
     print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     #script_dir = '/raid/reedbuck/qfeng/pbh/'
@@ -2349,7 +2349,7 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
             with open(scriptfullname, 'w') as script:
                 script.write('#PBS -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
                 script.write('#PBS -o %s\n'%os.path.join(script_dir, 'qsub_%s.log'%scriptname))
-                script.write('#PBS -l walltime=120:00:00\n')
+                script.write('#PBS -l walltime='+str(walltime)+':00:00\n')
                 script.write('#PBS -l pvmem=5gb\n')
                 script.write('cd %s\n'%script_dir)
                 if plot:
@@ -2403,6 +2403,7 @@ if __name__ == "__main__":
     parser.add_option("-p","--plot", action="store_true", dest="plot", default=False)
     parser.add_option("-b","--bkg_method", dest="bkg_method", default="scramble")
     parser.add_option("-m","--makeup", action="store_false", dest="overwrite", default=True)
+    parser.add_option("-t","--walltime",dest="walltime", type="int", default=48)
     #parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
@@ -2410,7 +2411,7 @@ if __name__ == "__main__":
     if options.runlist is not None:
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
         qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
-                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite)
+                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
 
     if options.run is not None:
         print('\n\n#########################################')
