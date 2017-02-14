@@ -2398,6 +2398,7 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
             logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
             #script = open(scriptfullname, 'w')
             with open(scriptfullname, 'w') as script:
+                script.write('#!/bin/bash -l \n')
                 script.write('# SBATCH -p shared \n')
                 script.write('# SBATCH -N 2\n')
                 script.write('# SBATCH -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
@@ -2406,9 +2407,9 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
                 #script.write('# SBATCH -l pvmem=5gb\n')
                 script.write('cd %s\n'%script_dir)
                 if plot:
-                    script.write('srun -n 1 python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
                 else:
-                    script.write('srun -n 1 python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
             script.close()
             #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             #isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
