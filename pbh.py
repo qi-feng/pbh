@@ -74,6 +74,7 @@ class Pbh(object):
         self.VERITAS_deadtime = 0.33e-3  # 0.33ms
         self.runNum = 0
         self.data_dir = '/raid/reedbuck/qfeng/pbh/data'
+        #self.data_dir = '/global/cscratch1/sd/qifeng/data/pbh_data/'
 
     def read_photon_list(self, ts, RAs, Decs, Es, ELs):
         N_ = len(ts)
@@ -2366,6 +2367,62 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
         except:
             print("*** Can't process run: %d ***" % run_num)
             raise
+
+def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
+                     script_dir = '/global/cscratch1/sd/qifeng/pbh/', overwrite=True, hostname=None, walltime=48):
+    print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
+    #data_base_dir = '/raid/reedbuck/veritas/data/'
+    #script_dir = '/raid/reedbuck/qfeng/pbh/'
+
+    runlist_df = pd.read_csv(filename, header=None)
+    runlist_df.columns = ["runNum"]
+    runlist = runlist_df.runNum.values
+    if hostname is None:
+        hostname = socket.gethostname()
+    for run_num in runlist:
+        try:
+            pyscriptname = "pbh.py"
+            scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
+            scriptfullname = os.path.join(script_dir, scriptname)
+            pyscriptname = os.path.join(script_dir, pyscriptname)
+            pklname = "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run_num)+"_window"+str(window_size)+"-s.pkl"
+            #if os.path.exists(scriptfullname):
+            if os.path.exists(pklname):
+                #print('*** Warning: script already exists: %s ***'%scriptfullname)
+                print('*** Warning: pickle file already exists: %s ***'%pklname)
+                if not overwrite:
+                    print("Aborting")
+                    continue
+                    #sys.exit(1)
+                print('Overwriting...')
+            logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
+            #script = open(scriptfullname, 'w')
+            with open(scriptfullname, 'w') as script:
+                script.write('# SBATCH -p shared \n')
+                script.write('# SBATCH -N 2\n')
+                script.write('# SBATCH -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
+                script.write('# SBATCH -o %s\n'%os.path.join(script_dir, 'qsub_%s.log'%scriptname))
+                script.write('# SBATCH -t %s\n'%(str(walltime)+':00:00\n'))
+                #script.write('# SBATCH -l pvmem=5gb\n')
+                script.write('cd %s\n'%script_dir)
+                if plot:
+                    script.write('srun -n 1 python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                else:
+                    script.write('srun -n 1 python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+            script.close()
+            #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
+            #isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
+            isend_command = 'sbatch %s'%(scriptfullname)
+
+
+
+            print(isend_command)
+            os.system(isend_command)
+            print("Run %d sent to queue." % run_num)
+        except:
+            print("*** Can't process run: %d ***" % run_num)
+            raise
+
 
 def jackknife_runlist(runlist="pbh_1-s_scramble_all_90eff_list.txt", num_samples=5, run=True, window_size=1,
                       filetag="scramble_all_90eff", upper_burst_size=None, start_subsample=0):
