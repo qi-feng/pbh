@@ -2461,13 +2461,18 @@ if __name__ == "__main__":
     parser.add_option("-b","--bkg_method", dest="bkg_method", default="scramble")
     parser.add_option("-m","--makeup", action="store_false", dest="overwrite", default=True)
     parser.add_option("-t","--walltime",dest="walltime", type="int", default=48)
+    parser.add_option("-c","--cori", action="store_true", dest="cori", default=False)
     #parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
 
     if options.runlist is not None:
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
-        qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
+        if options.cori:
+            qsub_cori_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
+                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
+        else:
+            qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
                          bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
 
     if options.run is not None:
