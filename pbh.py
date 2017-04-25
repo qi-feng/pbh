@@ -1,6 +1,8 @@
 __author__ = 'qfeng'
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+
 import os
 import pandas as pd
 from scipy.optimize import curve_fit, minimize
@@ -51,7 +53,11 @@ class Pbh(object):
         # selected based on sims at 90% efficiency
         #self.ll_cut = -9.5
         self.ll_cut = -9.1
-        self.ll_cut_dict = {2:-9.11,3:-9.00,4:-9.01, 5:-9.06, 6:-9.12, 7:-9.16, 8:-9.19, 9:-9.21, 10:-9.25}
+        #self.ll_cut_dict = {2:-9.11,3:-9.00,4:-9.01, 5:-9.06, 6:-9.12, 7:-9.16, 8:-9.19, 9:-9.21, 10:-9.25}
+        # Dec=0 after cos correction
+        self.ll_cut_dict = {2:-8.81,3:-8.69,4:-8.80, 5:-8.82, 6:-8.85, 7:-8.90, 8:-8.92, 9:-8.98, 10:-8.99}
+        # Dec=80 after cos correction
+        #self.ll_cut_dict = {2:-8.81,3:-8.72,4:-8.76, 5:-8.83, 6:-8.86, 7:-8.88, 8:-8.95, 9:-8.96, 10:-8.99}
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
@@ -300,7 +306,7 @@ class Pbh(object):
         return self.photon_df.ts
 
 
-    @autojit
+    #@autojit
     def psf_func(self, theta2, psf_width, N=100):
         return 1.7142 * N / 2. / np.pi / (psf_width ** 2) / np.cosh(np.sqrt(theta2) / psf_width)
         # equivalently:
@@ -319,11 +325,11 @@ class Pbh(object):
 
     # use hard coded width table from the hyperbolic secant function
     def get_psf(self, E=0.1, EL=80):
-        E_bin = np.digitize(E, self.E_grid) - 1
-        EL_bin = np.digitize(EL, self.EL_grid) - 1
+        E_bin = np.digitize(E, self.E_grid, right=True) - 1
+        EL_bin = np.digitize(EL, self.EL_grid, right=True) - 1
         return self.psf_lookup[E_bin, EL_bin]
 
-    @autojit
+    #@autojit
     def get_psf_lists(self):
         """
         This thing is slow...
@@ -344,7 +350,7 @@ class Pbh(object):
             #    print "Got a None psf, energy is ", self.photon_df.at[i, 'Es'], "EL is ", EL_
             #print "PSF,", self.photon_df.psfs.at[i]
 
-    @autojit
+    #@autojit
     def get_angular_distance(self, coord1, coord2):
         """
         coord1 and coord2 are in [ra, dec] format in degrees
@@ -353,7 +359,7 @@ class Pbh(object):
                                  + np.cos(deg2rad(coord1[1])) * np.cos(deg2rad(coord2[1])) *
                                  np.cos(deg2rad(coord1[0]) - deg2rad(coord2[0]))))
 
-    @autojit
+    #@autojit
     def get_all_angular_distance(self, coords, cent_coord):
         assert coords.shape[1] == 2
         dists = np.zeros(coords.shape[0])
@@ -361,13 +367,29 @@ class Pbh(object):
             dists[i] = self.get_angular_distance(coord, cent_coord)
         return dists
 
+    def gen_one_random_coords_projected_plane(self, cent_coord, theta):
+        """
+        *** Here use small angle approx, as it is only a sanity check ***
+        :return a pair of uniformly random RA and Dec at theta deg away from the cent_coord
+        """
+        # the dec of this small circle should be in the range of [cent_dec - theta, cent_dec + theta]
+        delta_dec = (np.random.random() * 2. -1.) * theta
+        _dec = cent_coord[1] + delta_dec
+        # Note that dec is 90 deg - theta in spherical coordinates
+        _ra = cent_coord[0] + rad2deg( np.arccos ( np.cos(deg2rad(theta)) * (1./np.cos(deg2rad(90.-cent_coord[1]))) * (1./np.cos(deg2rad(90.-_dec))) \
+                                                   - np.tan(deg2rad(90.-cent_coord[1])) *  np.tan(deg2rad(90.-_dec)) ) )
+        #_ra = cent_coord[0] + rad2deg( np.arccos ( np.cos(deg2rad(theta)) * (1./np.cos(deg2rad(cent_coord[1]))) * (1./np.cos(deg2rad(_dec))) \
+        #                                           - np.tan(deg2rad(cent_coord[1])) *  np.tan(deg2rad(_dec)) ) )
+        return np.array([_ra, _dec])
+
     def gen_one_random_coords(self, cent_coord, theta):
         """
         *** Here use small angle approx, as it is only a sanity check ***
         :return a pair of uniformly random RA and Dec at theta deg away from the cent_coord
         """
         _phi = np.random.random() * np.pi * 2.
-        _ra = cent_coord[0] + np.sin(_phi) * theta
+        #_ra = cent_coord[0] + np.sin(_phi) * theta
+        _ra = cent_coord[0] + np.sin(_phi) * theta / np.cos(deg2rad(cent_coord[1]))
         _dec = cent_coord[1] + np.cos(_phi) * theta
         return np.array([_ra, _dec])
 
@@ -395,7 +417,7 @@ class Pbh(object):
         else:
             return "Input prob value not supported"
 
-    @autojit
+    #@autojit
     def centroid_log_likelihood(self, cent_coord, coords, psfs):
         """
         returns ll=-2*ln(L)
@@ -403,6 +425,7 @@ class Pbh(object):
         ll = 0
         dists = self.get_all_angular_distance(coords, cent_coord)
         theta2s = dists ** 2
+        #self.psf_func(theta2, psf_width, N=1)
         #ll = -2.* np.log(  1.7142 * N / 2. / np.pi / (psf_width ** 2) / np.cosh(np.sqrt(theta2) / psf_width)  )
         ll = -2. * np.sum(np.log(psfs)) + np.sum(np.log(1. / np.cosh(np.sqrt(theta2s) / psfs)))
         ll += psfs.shape[0] * np.log(1.7142 / np.pi)
@@ -411,7 +434,7 @@ class Pbh(object):
         #Normalized by the number of events!
         return ll / psfs.shape[0]
 
-    @autojit
+    #@autojit
     def minimize_centroid_ll(self, coords, psfs):
         init_centroid = np.mean(coords, axis=0)
         results = minimize(self.centroid_log_likelihood, init_centroid, args=(coords, psfs), method='L-BFGS-B')
@@ -599,7 +622,7 @@ class Pbh(object):
         #return self.photon_df.burst_sizes
         return burst_hist, self.burst_dict
 
-    @autojit
+    #@autojit
     def singlet_remover(self, slice_index, verbose=False):
         """
         :param slice_index: a np array of events' indices in photon_df
@@ -723,7 +746,7 @@ class Pbh(object):
         return self.burst_dict
 
     #@autojit
-    def burst_counting(self):
+    def burst_counting_recur(self):
         """
         :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
         """
@@ -743,7 +766,50 @@ class Pbh(object):
         self._burst_dict.pop(largest_burst_number, None)
         # repeat while there are unprocessed bursts in _burst_dict
         if len(self._burst_dict) >= 1:
-            self.burst_counting()
+            self.burst_counting_recur()
+
+    def burst_counting(self):
+        """
+        :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
+        """
+        # Only to be called after self._burst_dict is filled
+        while len(self._burst_dict) >= 1:
+            # Find the largest burst
+            largest_burst_number = max(self._burst_dict, key=lambda x: len(set(self._burst_dict[x])))
+            for evt in self._burst_dict[largest_burst_number]:
+                # Assign burst size to all events in the largest burst
+                self.photon_df.at[evt, 'burst_sizes'] = self._burst_dict[largest_burst_number].shape[0]
+                #self.photon_df.burst_sizes[evt] = len(self._burst_dict[largest_burst_number])
+                for key in self._burst_dict.keys():
+                    # Now delete the assigned events in all other candiate bursts to avoid double counting
+                    if evt in self._burst_dict[key] and key != largest_burst_number:
+                        #self._burst_dict[key].remove(evt)
+                        self._burst_dict[key] = np.delete(self._burst_dict[key], np.where(self._burst_dict[key] == evt))
+            # Delete the largest burst, which is processed above
+            self._burst_dict.pop(largest_burst_number, None)
+            # repeat while there are unprocessed bursts in _burst_dict
+            #if len(self._burst_dict) >= 1:
+            #    self.burst_counting()
+
+    def burst_counting_fractional(self):
+        """
+        :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
+        """
+        # Only to be called after self._burst_dict is filled
+        while len(self._burst_dict) >= 1:
+            # Find the largest burst
+            largest_burst_number = max(self._burst_dict, key=lambda x: len(set(self._burst_dict[x])))
+            for evt in self._burst_dict[largest_burst_number]:
+                # Assign burst size to all events in the largest burst
+                self.photon_df.at[evt, 'burst_sizes'] = self._burst_dict[largest_burst_number].shape[0]
+                #self.photon_df.burst_sizes[evt] = len(self._burst_dict[largest_burst_number])
+                for key in self._burst_dict.keys():
+                    # Now delete the assigned events in all other candiate bursts to avoid double counting
+                    if evt in self._burst_dict[key] and key != largest_burst_number:
+                        #self._burst_dict[key].remove(evt)
+                        self._burst_dict[key] = np.delete(self._burst_dict[key], np.where(self._burst_dict[key] == evt))
+            # Delete the largest burst, which is processed above
+            self._burst_dict.pop(largest_burst_number, None)
 
     def get_burst_hist(self):
         burst_hist = {}
@@ -891,7 +957,7 @@ class Pbh(object):
             print("The value of the expected number of bursts (eq 8.9) is %.2f" % n_ex)
         return n_ex
 
-    @autojit
+    #@autojit
     def ll(self, n_on, n_off, n_expected):
         #eq 8.13 without the sum
         return -2. * (-1. * n_expected + n_on * np.log(n_off + n_expected))
@@ -955,7 +1021,7 @@ class Pbh(object):
             lls_[i] = self.get_ll(rho_dot_, burst_size_thresh, t_window, verbose=verbose, upper_burst_size=upper_burst_size)
         return rho_dots, lls_
 
-    @autojit
+    #@autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
                        verbose=False, upper_burst_size=100):
                        #verbose=False, upper_burst_size=None):
@@ -1116,29 +1182,38 @@ class Pbh(object):
 
     def plot_skymap(self, coords, Es, ELs, ax=None, color='r', fov_center=None, fov=1.75, fov_color='gray',
                     cent_coords=None, cent_marker='+', cent_ms=1.8, cent_mew=4.0, cent_radius=0.01, cent_color='b',
-                    label=None):
+                    label=None, projection=None):
         if ax is None:
             fig = plt.figure(figsize=(5, 5))
-            ax = plt.subplot(111)
+            if projection is not None:
+                ax = plt.subplot(111, projection="aitoff")
+            else:
+                ax = plt.subplot(111)
         ax.plot(coords[:, 0], coords[:, 1], color + '.')
         label_flag = False
         for coor, E_, EL_ in zip(coords, Es, ELs):
+            r = self.get_psf(E_, EL_)
             if label_flag == False:
-                circ = plt.Circle(coor, radius=self.get_psf(E_, EL_), color=color, fill=False, label=label)
+                #circ = plt.Circle(coor, radius=self.get_psf(E_, EL_), color=color, fill=False, label=label)
+                ellipse = Ellipse(coor, r / np.cos(deg2rad(coor[1])) * 2, r * 2, color=color, fill=False, label=label)
                 label_flag = True
             else:
-                circ = plt.Circle(coor, radius=self.get_psf(E_, EL_), color=color, fill=False)
-            ax.add_patch(circ)
+                #circ = plt.Circle(coor, radius=self.get_psf(E_, EL_), color=color, fill=False)
+                ellipse = Ellipse(coor, r / np.cos(deg2rad(coor[1])) * 2, r * 2, color=color, fill=False)
+            #ax.add_patch(circ)
+            ax.add_patch(ellipse)
 
         label_flag = False
         if fov is not None and fov_center is not None:
-            circ_fov = plt.Circle(fov_center, radius=fov, color=fov_color, fill=False)
-            ax.add_patch(circ_fov)
+            #circ_fov = plt.Circle(fov_center, radius=fov, color=fov_color, fill=False)
+            ellipse_fov = Ellipse(fov_center, fov / np.cos(deg2rad(fov_center[1])) * 2, fov * 2, color=fov_color, fill=False)
+            #ax.add_patch(circ_fov)
+            ax.add_patch(ellipse_fov)
             ax.set_xlim(fov_center[0] - fov * 1.1, fov_center[0] + fov * 1.1)
             ax.set_ylim(fov_center[1] - fov * 1.1, fov_center[1] + fov * 1.1)
         if cent_coords is not None:
-            #circ_cent=plt.Circle(cent_coords, radius=cent_radius, color=cent_color, fill=False)
-            #ax.add_patch(circ_cent)
+            # circ_cent=plt.Circle(cent_coords, radius=cent_radius, color=cent_color, fill=False)
+            # ax.add_patch(circ_cent)
             ax.plot(cent_coords[0], cent_coords[1], marker=cent_marker, ms=cent_ms, markeredgewidth=cent_mew,
                     color=color)
 
@@ -1146,6 +1221,7 @@ class Pbh(object):
         ax.set_xlabel('RA')
         ax.set_ylabel("Dec")
         return ax
+
 
 class Pbh_combined(Pbh):
     def __init__(self, window_size):
@@ -1363,7 +1439,7 @@ class Pbh_combined(Pbh):
             print("###############################################################################")
         return ll_
 
-    @autojit
+    #@autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
                        verbose=False, upper_burst_size=100):
                        #verbose=False, upper_burst_size=None):
@@ -2398,22 +2474,26 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
             logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
             #script = open(scriptfullname, 'w')
             with open(scriptfullname, 'w') as script:
-                script.write('#!/bin/bash -l \n')
-                script.write('# SBATCH -p shared \n')
-                script.write('# SBATCH -N 2\n')
-                script.write('# SBATCH -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
-                script.write('# SBATCH -o %s\n'%os.path.join(script_dir, 'qsub_%s.log'%scriptname))
-                script.write('# SBATCH -t %s\n'%(str(walltime)+':00:00\n'))
-                #script.write('# SBATCH -l pvmem=5gb\n')
-                script.write('cd %s\n'%script_dir)
+                script.write('#!/bin/bash -l \n\n')
+                script.write('#SBATCH -p shared \n')
+                script.write('#SBATCH -N 1\n')
+                script.write('#SBATCH -L SCRATCH\n')
+                script.write('#SBATCH -e %s\n' % os.path.join(script_dir, 'qsub_%s.err' % scriptname))
+                script.write('#SBATCH -o %s\n' % os.path.join(script_dir, 'qsub_%s.log' % scriptname))
+                script.write('#SBATCH -t %s\n' % (str(walltime) + ':00:00\n'))
+                # script.write('#SBATCH -l pvmem=5gb\n')
+                script.write("source /global/homes/q/qifeng/.bashrc.ext")
+                script.write('cd %s\n' % script_dir)
                 if plot:
-                    script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    #script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    script.write('python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
                 else:
-                    script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    #script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    script.write('python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
             script.close()
             #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             #isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
-            isend_command = 'sbatch %s'%(scriptfullname)
+            isend_command = 'sbatch -C haswell %s'%(scriptfullname)
 
 
 
