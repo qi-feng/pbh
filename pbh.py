@@ -5,10 +5,13 @@ from matplotlib.patches import Ellipse
 
 import os
 import pandas as pd
-from scipy.optimize import curve_fit, minimize
-from scipy import stats
+#from scipy.optimize import curve_fit, minimize
+from scipy.optimize import minimize
+#from scipy import stats
 import random
 import shutil
+from scipy import integrate
+
 
 import sys
 if (sys.version_info > (3, 0)):
@@ -32,12 +35,12 @@ try:
 except:
     print("Can't import ROOT, no related functionality possible")
 
-import time
+#import time
 
-try:
-    from numba import jit, autojit
-except:
-    print("Numba not installed")
+#try:
+#    from numba import jit, autojit
+#except:
+#    print("Numba not installed")
 
 def deg2rad(deg):
     return deg / 180. * np.pi
@@ -55,9 +58,11 @@ class Pbh(object):
         self.ll_cut = -9.1
         #self.ll_cut_dict = {2:-9.11,3:-9.00,4:-9.01, 5:-9.06, 6:-9.12, 7:-9.16, 8:-9.19, 9:-9.21, 10:-9.25}
         # Dec=0 after cos correction
-        self.ll_cut_dict = {2:-8.81,3:-8.69,4:-8.80, 5:-8.82, 6:-8.85, 7:-8.90, 8:-8.92, 9:-8.98, 10:-8.99}
+        #self.ll_cut_dict = {2:-8.81,3:-8.69,4:-8.80, 5:-8.82, 6:-8.85, 7:-8.90, 8:-8.92, 9:-8.98, 10:-8.99}
         # Dec=80 after cos correction
         #self.ll_cut_dict = {2:-8.81,3:-8.72,4:-8.76, 5:-8.83, 6:-8.86, 7:-8.88, 8:-8.95, 9:-8.96, 10:-8.99}
+        # Dec=80 after cos correction, from fit
+        self.ll_cut_dict = {2:-8.83,3:-8.73,4:-8.76, 5:-8.81, 6:-8.86, 7:-8.90, 8:-8.94, 9:-8.97, 10:-8.99}
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
@@ -318,8 +323,10 @@ class Pbh(object):
         :param fov: given so that we calculate cdf from 0 to fov
         :return:
         """
-        theta2s = np.arange(0, fov, 0.01)
-        cdf = np.cumsum(self.psf_func(theta2s, psf_width, N=1))
+        _thetas = np.arange(0, fov, 0.01)
+        _theta2s = _thetas ** 2
+        #cdf = np.cumsum(self.psf_func(theta2s, psf_width, N=1))
+        cdf = integrate.cumtrapz(self.psf_func(_theta2s, psf_width, N=1), _thetas, initial=0)
         cdf = cdf / np.max(cdf)
         return cdf
 
@@ -404,7 +411,8 @@ class Pbh(object):
             _theta2s = _thetas ** 2
             #_theta2s=np.arange(0, fov*fov, 0.0001732)
             _psf_pdf = self.psf_func(_theta2s, psf_width, N=1)
-            _cdf = np.cumsum(_psf_pdf - np.min(_psf_pdf))
+            #_cdf = np.cumsum(_psf_pdf - np.min(_psf_pdf))
+            _cdf = integrate.cumtrapz(_psf_pdf, _thetas, initial=0)
             _cdf = _cdf / np.max(_cdf)
             #y_interp = np.interp(x_interp, x, y)
             _theta2 = np.interp(_rand_test_cdf, _cdf, _theta2s)
@@ -1724,21 +1732,24 @@ def cut_90efficiency(ll_sig_all, ll_bkg_all, ll_cuts, upper=True, plot=True, out
         plt.show()
     return best_cut
 
-def sim_psf_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
+
+def sim_psf_likelihood(Nsim=1000, N_burst=3, filename=None,
+                       sig_bins=50, bkg_bins=100, ylog=True,
+                       EL=75, fov_center=np.array([180., 30.0])):
     pbh = Pbh()
-    fov_center = np.array([180., 30.0])
+
     fov = 1.75
 
-    #spec sim:
+    # spec sim:
     index = -2.5
     E_min = 0.08
     E_max = 50.0
-    #Burst size to visualize
-    #N_burst = 10
-    EL = 15
+    # Burst size to visualize
+    # N_burst = 10
+    # EL = 15
     pl_nu = powerlaw(index, E_min, E_max)
 
-    #Nsim = 1000
+    # Nsim = 1000
     ll_bkg_all = np.zeros(Nsim)
     ll_sig_all = np.zeros(Nsim)
 
@@ -1761,7 +1772,6 @@ def sim_psf_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bin
         ll_bkg_all[j] = ll_bkg
         ll_sig_all[j] = ll_sig
     return ll_sig_all, ll_bkg_all
-
 
 
 def test_sim_likelihood(Nsim=1000, N_burst=3, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
@@ -1796,13 +1806,17 @@ def eff_cut(Nsim=10000, N_burst=3):
                                   outfile="psf_likelihood_cut_90efficiency_sim"+str(Nsim)+"_burst_size"+str(N_burst)+".png")
     return best_cut
 
-def sim_cut_90efficiency(NMC=50, Nsim=2000, N_burst=3, upper=True, plot=False, outfile=None,
+
+def sim_cut_90efficiency(NMC=50, Nsim=2000, N_burst=3, upper=True, plot=True, outfile=None,
+                         EL = 75, fov_center = np.array([180., 30.0]),
                          cut_bins=50, ylog=False):
     cuts = np.zeros(NMC).astype('float')
     for trial in range(NMC):
-        ll_sig_all, ll_bkg_all = sim_psf_likelihood(Nsim=Nsim, N_burst=N_burst, filename=None, sig_bins=50, bkg_bins=100, ylog=True)
-        ll_cuts=np.arange(-15,40,0.1)
-        label="Burst size "+str(N_burst)
+        ll_sig_all, ll_bkg_all = sim_psf_likelihood(Nsim=Nsim, N_burst=N_burst, filename=None,
+                                                    EL = EL, fov_center = fov_center,
+                                                    sig_bins=50, bkg_bins=100, ylog=True)
+        ll_cuts=np.arange(-15,40,0.05)
+        label="Burst size "+str(N_burst) + ", Dec {:.0f}".format(fov_center[1])
         #for i, c in enumerate(ll_cuts):
         #    sig = calc_cut_sig(ll_sig_all, ll_bkg_all, c, upper=upper)
         #    sigs[i] = sig
@@ -1819,8 +1833,6 @@ def sim_cut_90efficiency(NMC=50, Nsim=2000, N_burst=3, upper=True, plot=False, o
             plt.savefig(outfile)
         plt.show()
     return cuts
-
-
 
 
 def test_burst_finding(window_size=3, runNum=55480, nlines=None, N_scramble=3, plt_log=True, verbose=False,
