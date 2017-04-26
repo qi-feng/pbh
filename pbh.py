@@ -323,7 +323,7 @@ class Pbh(object):
         :param fov: given so that we calculate cdf from 0 to fov
         :return:
         """
-        _thetas = np.arange(0, fov, 0.01)
+        _thetas = np.arange(0, fov, 0.001)
         _theta2s = _thetas ** 2
         #cdf = np.cumsum(self.psf_func(theta2s, psf_width, N=1))
         cdf = integrate.cumtrapz(self.psf_func(_theta2s, psf_width, N=1), _thetas, initial=0)
@@ -407,7 +407,7 @@ class Pbh(object):
         if prob.lower() == "psf" or prob == "hypersec" or prob == "hyper secant":
             #_rand_theta = np.random.random()*fov
             _rand_test_cdf = np.random.random()
-            _thetas = np.arange(0, fov, 0.01)
+            _thetas = np.arange(0, fov, 0.001)
             _theta2s = _thetas ** 2
             #_theta2s=np.arange(0, fov*fov, 0.0001732)
             _psf_pdf = self.psf_func(_theta2s, psf_width, N=1)
