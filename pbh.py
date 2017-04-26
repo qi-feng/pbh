@@ -62,7 +62,9 @@ class Pbh(object):
         # Dec=80 after cos correction
         #self.ll_cut_dict = {2:-8.81,3:-8.72,4:-8.76, 5:-8.83, 6:-8.86, 7:-8.88, 8:-8.95, 9:-8.96, 10:-8.99}
         # Dec=80 after cos correction, from fit
-        self.ll_cut_dict = {2:-8.83,3:-8.73,4:-8.76, 5:-8.81, 6:-8.86, 7:-8.90, 8:-8.94, 9:-8.97, 10:-8.99}
+        #self.ll_cut_dict = {2:-8.83,3:-8.73,4:-8.76, 5:-8.81, 6:-8.86, 7:-8.90, 8:-8.94, 9:-8.97, 10:-8.99}
+        # Dec=80 after cos correction, from fit, new cumtrapz integration
+        self.ll_cut_dict = {2:-8.63,3:-8.57,4:-8.57, 5:-8.61, 6:-8.64, 7:-8.68, 8:-8.73, 9:-8.77, 10:-8.79}
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
