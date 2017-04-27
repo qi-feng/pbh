@@ -64,7 +64,9 @@ class Pbh(object):
         # Dec=80 after cos correction, from fit
         #self.ll_cut_dict = {2:-8.83,3:-8.73,4:-8.76, 5:-8.81, 6:-8.86, 7:-8.90, 8:-8.94, 9:-8.97, 10:-8.99}
         # Dec=80 after cos correction, from fit, new cumtrapz integration
-        self.ll_cut_dict = {2:-8.637,3:-8.55,4:-8.564, 5:-8.614, 6:-8.656, 7:-8.7, 8:-8.737, 9:-8.767, 10:-8.794}
+        #self.ll_cut_dict = {2:-8.637,3:-8.55,4:-8.564, 5:-8.614, 6:-8.656, 7:-8.7, 8:-8.737, 9:-8.767, 10:-8.794}
+        # Dec=80 after cos correction, new cumtrapz integration, theta2 instead of theta
+        self.ll_cut_dict = {2:-6.8,3:-6.8,4:-6.8, 5:-6.8, 6:-6.8, 7:-6.8, 8:-6.8, 9:-6.8, 10:-6.8}
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
@@ -409,12 +411,14 @@ class Pbh(object):
         if prob.lower() == "psf" or prob == "hypersec" or prob == "hyper secant":
             #_rand_theta = np.random.random()*fov
             _rand_test_cdf = np.random.random()
-            _thetas = np.arange(0, fov, 0.001)
-            _theta2s = _thetas ** 2
-            #_theta2s=np.arange(0, fov*fov, 0.0001732)
+            #_thetas = np.arange(0, fov, 0.001)
+            #_theta2s = _thetas ** 2
+            _theta2s = np.arange(0, fov ** 2, 1e-4)
+            _thetas = np.sqrt(_theta2s)
             _psf_pdf = self.psf_func(_theta2s, psf_width, N=1)
             #_cdf = np.cumsum(_psf_pdf - np.min(_psf_pdf))
-            _cdf = integrate.cumtrapz(_psf_pdf, _thetas, initial=0)
+            #_cdf = integrate.cumtrapz(_psf_pdf, _thetas, initial=0)
+            _cdf = integrate.cumtrapz(_psf_pdf, _theta2s, initial=0)
             _cdf = _cdf / np.max(_cdf)
             #y_interp = np.interp(x_interp, x, y)
             _theta2 = np.interp(_rand_test_cdf, _cdf, _theta2s)
@@ -426,6 +430,31 @@ class Pbh(object):
             return abs(np.random.normal()) * fov
         else:
             return "Input prob value not supported"
+
+    def gen_one_random_theta_simon_method(self, psf_width, prob="psf", fov=1.75):
+
+        def fControl(x, psf_width=0.05):
+            return 4. * psf_width / np.pi * np.arctanh(np.tan(np.pi * x / 4.))
+            # return 4.*psf_width/np.pi*np.arctanh(np.exp(np.pi*x/4.))
+
+        def fC_Function(x, psf_width=0.05):
+            return 1. / (psf_width * np.cosh(np.sqrt(x) * 0.5 / psf_width))
+
+        def psf_pdf_simon(x, psf_width=0.05):
+            return 1.7149 / (2 * np.pi * psf_width * np.cosh(np.sqrt(x) * 1.0 / psf_width))
+
+        z0 = 9999.
+        pdf_y0 = 0.
+        y0 = 0.
+        while z0 > pdf_y0:
+            _rand_ = np.random.random()
+            y0 = fControl(_rand_, psf_width=psf_width)
+            c_y0 = fC_Function(y0, psf_width=psf_width)
+            z0 = c_y0 * np.random.random()
+            # z0 = c_y0 * _rand_
+            pdf_y0 = psf_pdf_simon(y0, psf_width)
+            # pdf_y0 = psf_func(y0, psf_width, N=1)
+        return y0
 
     #@autojit
     def centroid_log_likelihood(self, cent_coord, coords, psfs):
