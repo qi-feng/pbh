@@ -2280,6 +2280,50 @@ def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=r
     plt.show()
     return lls, n_exps
 
+def fit_gaussian_hist(bins, n):
+    """ input is the bin edges and bin content returned by plt.hist. """
+    def gaus(x, a, b, c):
+        return a * np.exp(-(x - b)**2.0 / (2 * c**2))
+    x = [0.5 * (bins[i] + bins[i+1]) for i in range(len(bins)-1)]
+    y = n
+    popt, pcov = optimize.curve_fit(gaus, x, y, p0=(-10, np.average(x, weights=n), 0.2))
+    print("Fit results {}".format(popt))
+    print("covariance matrix {}".format(pcov))
+
+    x_fit = np.linspace(x[0], x[-1], 100)
+    y_fit = gaus(x_fit, *popt)
+    #returns x, y for plotting, and mean and sigma from fit
+    return x_fit, y_fit, popt[1], popt[2], np.sqrt(np.diag(pcov))[1], np.sqrt(np.diag(pcov))[2]
+
+
+def psf_cut_search(NMC=1000, Nsim=1000, bss = range(2,11), fov_center = np.array([180., 80.0])):
+    #cut_list = []
+    best_cuts = []
+    dec = fov_center[1]
+    #for bs_ in range(2,10): #kernel died
+    for bs_ in bss:
+        sim_cuts_Dec80_ = sim_cut_90efficiency(NMC=NMC, Nsim=Nsim, N_burst=bs_,
+                                          fov_center = fov_center,
+                                          outfile="sim_cuts_distr_bs"+str(bs_)+"_Dec"+("{:.0f}".format(dec))+"_1M_sims_v4.png")
+
+        np.save("sim_cuts_distr_bs"+str(bs_)+"_Dec"+("{:.0f}".format(dec))+"_1M_sims_v4.npy", sim_cuts_Dec80_)
+        #cut_list.append(sim_cuts_Dec80_)
+        hist_, bins_, _ = plt.hist(sim_cuts_Dec80_, bins=50, color='r', alpha=0.3, label="burst size {}, Dec={:.0f}$^\circ$".format(bs_, dec))
+        x_fit, y_fit, mu, sig, dmu, dsig = fit_gaussian_hist(bins_, hist_)
+        plt.plot(x_fit, y_fit, 'r--')
+        #plt.axvline(mu, color='r', ls='--', label="mean: {:.2f}$\pm${:.2f} \n sigma: {:.2f}$\pm${:.2f}".format(mu, dmu, sig, dsig))
+        plt.axvline(mu, color='r', ls='--', label="mean: {:.3f}$\pm${:.3f} \n sigma: {:.3f}$\pm${:.3f}".format(mu, dmu, sig, dsig))
+        plt.legend(loc='best')
+        plt.xlabel("Likelihood")
+        plt.savefig("sim_cuts_distr_bs"+str(bs_)+"_Dec"+("{:.0f}".format(dec))+"_1M_sims_fit_v4.pdf")
+        best_cuts.append(mu)
+        #plt.show()
+    print("best cuts: {}")
+    return best_cuts
+
+
+
+
 
 def compare_run(runid, window_size=10, outfile=None, ylog=True, pkldir="batch_all_scramble_all_events", show=True):
     # compare burst histograms with Simon's
