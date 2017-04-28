@@ -5,8 +5,9 @@ from matplotlib.patches import Ellipse
 
 import os
 import pandas as pd
-#from scipy.optimize import curve_fit, minimize
-from scipy.optimize import minimize
+from scipy.optimize import curve_fit, minimize
+#from scipy.optimize import minimize
+
 #from scipy import stats
 import random
 import shutil
@@ -2286,7 +2287,7 @@ def fit_gaussian_hist(bins, n):
         return a * np.exp(-(x - b)**2.0 / (2 * c**2))
     x = [0.5 * (bins[i] + bins[i+1]) for i in range(len(bins)-1)]
     y = n
-    popt, pcov = optimize.curve_fit(gaus, x, y, p0=(-10, np.average(x, weights=n), 0.2))
+    popt, pcov = curve_fit(gaus, x, y, p0=(-10, np.average(x, weights=n), 0.2))
     print("Fit results {}".format(popt))
     print("covariance matrix {}".format(pcov))
 
