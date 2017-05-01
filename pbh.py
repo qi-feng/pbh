@@ -67,7 +67,7 @@ class Pbh(object):
         # Dec=80 after cos correction, from fit, new cumtrapz integration
         #self.ll_cut_dict = {2:-8.637,3:-8.55,4:-8.564, 5:-8.614, 6:-8.656, 7:-8.7, 8:-8.737, 9:-8.767, 10:-8.794}
         # Dec=80 after cos correction, new cumtrapz integration, theta2 instead of theta
-        self.ll_cut_dict = {2:-6.68,3:-6.74,4:-6.71, 5:-6.76, 6:-6.8, 7:-6.84, 8:-6.88, 9:-6.92, 10:-6.9}
+        self.ll_cut_dict = {2:-6.68,3:-6.74,4:-6.71, 5:-6.76, 6:-6.8, 7:-6.84, 8:-6.88, 9:-6.92, 10:-6.96}
         # set the hard coded PSF width table from the hyperbolic secant function
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
@@ -1503,7 +1503,7 @@ class Pbh_combined(Pbh):
             return rho_dot_min_ll_, min_ll_, rho_dots, lls_
         return rho_dot_min_ll_, min_ll_
 
-    def get_ULs(self, burst_size_threshold=2, rho_dots=None, upper_burst_size=100):
+    def get_ULs(self, burst_size_threshold=2, rho_dots=None, upper_burst_size=None):
         print("Getting UL for burst size above %d..." % burst_size_threshold)
         if rho_dots is None:
             rho_dots = self.rho_dots
