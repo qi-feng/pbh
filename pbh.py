@@ -175,7 +175,7 @@ class Pbh(object):
             #making cut:
             #this is quite essential to double check!!!
             self.all_times[i] = event.timeOfDay
-            distance = np.sqrt(event.Xoff_derot * event.Xoff_derot + event.Yoff_derot * event.Yoff_derot)
+            distance = np.sqrt(event.Xderot * event.Xderot + event.Yderot * event.Yderot)
             if event.Energy < E_lo_cut or event.Energy > E_hi_cut or event.TelElevation < EL_lo_cut or event.IsGamma==0 or distance>distance_upper_cut:
                 df_.fail_cut.at[i] = 1
                 continue
@@ -1901,39 +1901,42 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2,11), runNum=55
     fig, axes = plt.subplots(3, len(N_bursts)/3, figsize=(18, 18))
 
     for xx, N_burst in enumerate(N_bursts):
+        sim_counter = 0
+        N_evt_segments = pbh.photon_df.shape[0]//N_burst
+        while sim_counter < Nsim:
+            sim_counter += 1
+            for j in range(N_evt_segments):
+                #pbh.scramble()
 
-        for j in range(Nsim):
-            #pbh.scramble()
+                #
+                this_slice = pbh.photon_df.iloc[j*N_burst:(j+1)*N_burst]
+                #this_slice = pbh.photon_df.iloc[j:j+N_burst]
+                #rand_Es = this_slice.Es.values
 
-            #
-            #this_slice = pbh.photon_df.iloc[j*N_burst:(j+1)*N_burst]
-            this_slice = pbh.photon_df.iloc[j:j+N_burst]
-            #rand_Es = this_slice.Es.values
+                #rand_bkg_coords = np.zeros((N_burst, 2))
+                rand_bkg_coords = np.array([this_slice.RAs, this_slice.Decs]).T
+                rand_sig_coords = np.zeros((N_burst, 2))
+                psfs = this_slice.psfs.values
 
-            #rand_bkg_coords = np.zeros((N_burst, 2))
-            rand_bkg_coords = np.array([this_slice.RAs, this_slice.Decs]).T
-            rand_sig_coords = np.zeros((N_burst, 2))
-            psfs = this_slice.psfs.values
+                fov_center, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
 
-            fov_center, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
+                for i in range(N_burst):
+                    psf_width = psfs[i]
+                    rand_sig_theta = pbh.gen_one_random_theta(psf_width, prob="psf", fov=fov)
+                    rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
-            for i in range(N_burst):
-                psf_width = psfs[i]
-                rand_sig_theta = pbh.gen_one_random_theta(psf_width, prob="psf", fov=fov)
-                rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
+                cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
+                ll_bkg_all[xx, j] = ll_bkg
+                ll_sig_all[xx, j] = ll_sig
 
-            cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
-            ll_bkg_all[xx, j] = ll_bkg
-            ll_sig_all[xx, j] = ll_sig
-
-        best_cuts[xx] = np.percentile(ll_sig_all[xx], 90)
-        axes.flatten()[xx].hist(ll_sig_all[xx], bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
-        axes.flatten()[xx].hist(ll_bkg_all[xx], bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
-        axes.flatten()[xx].axvline(x=best_cuts[xx], ls="--", lw=0.3, label="90% efficiency cut = {:.2f}".format(best_cuts[xx]))
-        axes.flatten()[xx].legend(loc='best')
-        axes.flatten()[xx].set_xlabel("Likelihood")
-        if ylog:
-            axes.flatten()[xx].set_yscale('log')
+            best_cuts[xx] = np.percentile(ll_sig_all[xx], 90)
+            axes.flatten()[xx].hist(ll_sig_all[xx], bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
+            axes.flatten()[xx].hist(ll_bkg_all[xx], bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
+            axes.flatten()[xx].axvline(x=best_cuts[xx], ls="--", lw=0.3, label="90% efficiency cut = {:.2f}".format(best_cuts[xx]))
+            axes.flatten()[xx].legend(loc='best')
+            axes.flatten()[xx].set_xlabel("Likelihood")
+            if ylog:
+                axes.flatten()[xx].set_yscale('log')
     plt.tight_layout()
     print(best_cuts)
     if filename is not None:
