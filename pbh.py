@@ -1891,9 +1891,9 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2,11), runNum=55
     pbh.get_TreeWithAllGamma(runNum=runNum, nlines=None)
 
 
-    if Nsim >= pbh.photon_df.shape[0] - 1:
-        print("Only {} events, doing {} sims instead of {}...".format(pbh.photon_df.shape[0], pbh.photon_df.shape[0] - 1, Nsim))
-        Nsim = pbh.photon_df.shape[0] - 1
+    #if Nsim >= pbh.photon_df.shape[0] - 1:
+    #    print("Only {} events, doing {} sims instead of {}...".format(pbh.photon_df.shape[0], pbh.photon_df.shape[0] - 1, Nsim))
+    #    Nsim = pbh.photon_df.shape[0] - 1
     # Nsim = 1000
     ll_bkg_all = np.zeros((len(N_bursts), Nsim)).astype(float)
     ll_sig_all = np.zeros((len(N_bursts), Nsim)).astype(float)
