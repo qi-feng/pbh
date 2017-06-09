@@ -1026,8 +1026,8 @@ class Pbh(object):
             print("Overall Significance is %d" % significance)
         return significance
 
-    #def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
-    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=100):
+    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
+    #def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=100):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
         if upper_burst_size is None:
             all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
@@ -1055,8 +1055,8 @@ class Pbh(object):
             print("###############################################################################")
         return ll_
 
-    #def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False, upper_burst_size=None):
-    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False, upper_burst_size=100):
+    def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False, upper_burst_size=None):
+    #def get_ll_vs_rho_dot(self, burst_size_thresh, t_window, rho_dots=np.arange(0., 3.e5, 100), verbose=False, upper_burst_size=100):
         #plot a vertical slice of Fig 8-4, for a given burst size and search window, scan through rho_dot and plot -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
@@ -1067,8 +1067,8 @@ class Pbh(object):
 
     #@autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       verbose=False, upper_burst_size=100):
-                       #verbose=False, upper_burst_size=None):
+                       #verbose=False, upper_burst_size=100):
+                       verbose=False, upper_burst_size=None):
         #search rho_dots for the minimum -2lnL
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
@@ -1451,8 +1451,8 @@ class Pbh_combined(Pbh):
         return n_ex
 
     #Override get_ll so that it knows where to find the effective volume
-    #def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
-    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=100):
+    def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=None):
+    #def get_ll(self, rho_dot, burst_size_threshold, t_window, verbose=False, upper_burst_size=100):
         #eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
         if upper_burst_size is None:
             all_burst_sizes = self.get_all_burst_sizes()
@@ -1485,8 +1485,8 @@ class Pbh_combined(Pbh):
 
     #@autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       verbose=False, upper_burst_size=100):
-                       #verbose=False, upper_burst_size=None):
+                       #verbose=False, upper_burst_size=100):
+                       verbose=False, upper_burst_size=None):
         #search rho_dots for the minimum -2lnL for burst size >= burst_size
         if not isinstance(rho_dots, np.ndarray):
             rho_dots = np.asarray(rho_dots)
@@ -1904,10 +1904,9 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2,11), runNum=55
         sim_counter = 0
         N_evt_segments = pbh.photon_df.shape[0]//N_burst
         while sim_counter < Nsim:
-            sim_counter += 1
+            pbh.scramble()
             for j in range(N_evt_segments):
                 #pbh.scramble()
-
                 #
                 this_slice = pbh.photon_df.iloc[j*N_burst:(j+1)*N_burst]
                 #this_slice = pbh.photon_df.iloc[j:j+N_burst]
@@ -1926,17 +1925,20 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2,11), runNum=55
                     rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
                 cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
-                ll_bkg_all[xx, j] = ll_bkg
-                ll_sig_all[xx, j] = ll_sig
+                ll_bkg_all[xx, sim_counter] = ll_bkg
+                ll_sig_all[xx, sim_counter] = ll_sig
+                sim_counter += 1
+                if sim_counter >= Nsim:
+                    break
 
-            best_cuts[xx] = np.percentile(ll_sig_all[xx], 90)
-            axes.flatten()[xx].hist(ll_sig_all[xx], bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
-            axes.flatten()[xx].hist(ll_bkg_all[xx], bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
-            axes.flatten()[xx].axvline(x=best_cuts[xx], ls="--", lw=0.3, label="90% efficiency cut = {:.2f}".format(best_cuts[xx]))
-            axes.flatten()[xx].legend(loc='best')
-            axes.flatten()[xx].set_xlabel("Likelihood")
-            if ylog:
-                axes.flatten()[xx].set_yscale('log')
+        best_cuts[xx] = np.percentile(ll_sig_all[xx], 90)
+        axes.flatten()[xx].hist(ll_sig_all[xx], bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
+        axes.flatten()[xx].hist(ll_bkg_all[xx], bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
+        axes.flatten()[xx].axvline(x=best_cuts[xx], ls="--", lw=0.3, label="90% efficiency cut = {:.2f}".format(best_cuts[xx]))
+        axes.flatten()[xx].legend(loc='best')
+        axes.flatten()[xx].set_xlabel("Likelihood")
+        if ylog:
+            axes.flatten()[xx].set_yscale('log')
     plt.tight_layout()
     print(best_cuts)
     if filename is not None:
@@ -2330,7 +2332,7 @@ def plot_n_expected_all(pbh, t_windows, rs=np.arange(1e-2,30,1e-2), ax=None, col
         plt.show()
 
 
-def combine_from_pickle_list(listname, window_size, filetag="", burst_size_threshold=2, rho_dots=None, upper_burst_size=100):
+def combine_from_pickle_list(listname, window_size, filetag="", burst_size_threshold=2, rho_dots=None, upper_burst_size=None):
     pbhs_combined_all_ = combine_pbhs_from_pickle_list(listname)
     print("Total exposure time is %.2f hrs" % (pbhs_combined_all_.total_time_year*365.25*24))
     pbhs_combined_all_.get_ULs(burst_size_threshold=burst_size_threshold, rho_dots=rho_dots, upper_burst_size=upper_burst_size)
