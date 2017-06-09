@@ -127,7 +127,7 @@ class Pbh(object):
                 self.filename = filename
         self.Rfile = ROOT.TFile(self.filename, "read");
 
-    def get_TreeWithAllGamma(self, runNum=None, E_lo_cut=0.08, E_hi_cut=50.0, EL_lo_cut=50.0, nlines=None):
+    def get_TreeWithAllGamma(self, runNum=None, E_lo_cut=0.08, E_hi_cut=50.0, EL_lo_cut=50.0, distance_upper_cut=1.5, nlines=None):
         """
         :param runNum:
         :return: nothing but fills photon_df, except photon_df.burst_sizes
@@ -175,7 +175,8 @@ class Pbh(object):
             #making cut:
             #this is quite essential to double check!!!
             self.all_times[i] = event.timeOfDay
-            if event.Energy < E_lo_cut or event.Energy > E_hi_cut or event.TelElevation < EL_lo_cut or event.IsGamma==0:
+            distance = np.sqrt(event.Xoff_derot * event.Xoff_derot + event.Yoff_derot * event.Yoff_derot)
+            if event.Energy < E_lo_cut or event.Energy > E_hi_cut or event.TelElevation < EL_lo_cut or event.IsGamma==0 or distance>distance_upper_cut:
                 df_.fail_cut.at[i] = 1
                 continue
             i_gamma += 1
@@ -188,7 +189,7 @@ class Pbh(object):
             df_.Es[i] = event.Energy
             df_.ELs[i] = event.TelElevation
 
-        print("There are %d events, %d of which are gamma-like" % (N_,i_gamma))
+        print("There are %d events, %d of which are gamma-like and pass cuts" % (N_,i_gamma))
         self.N_all_events = N_
         self.N_gamma_events = i_gamma
         #df_.coords = np.concatenate([df_.RAs.reshape(N_,1), df_.Decs.reshape(N_,1)], axis=1)
@@ -1870,13 +1871,71 @@ def sim_psf_likelihood_scramble_data(Nsim=1000, N_burst=3,
 
 def test_sim_likelihood_from_data(Nsim=1000, N_burst=3, runNum=55480, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
     ll_sig_all, ll_bkg_all = sim_psf_likelihood_scramble_data(Nsim=Nsim, N_burst=N_burst, runNum=runNum)
+    best_cut = np.percentile(ll_sig_all, 90)
     plt.hist(ll_sig_all, bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
     plt.hist(ll_bkg_all, bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
-    plt.axvline(x=-9.5, ls="--", lw=0.3)
+    plt.axvline(x=best_cut, ls="--", lw=0.3, label="90% efficiency cut = {:.2f}".format(best_cut))
     plt.legend(loc='best')
     plt.xlabel("Likelihood")
     if ylog:
         plt.yscale('log')
+    if filename is not None:
+        plt.savefig(filename)
+    plt.show()
+    return None
+
+
+def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2,11), runNum=55480, filename=None, sig_bins=50, bkg_bins=100, ylog=True):
+    fov=1.75
+    pbh = Pbh()
+    pbh.get_TreeWithAllGamma(runNum=runNum, nlines=None)
+
+
+    if Nsim >= pbh.photon_df.shape[0] - 1:
+        print("Only {} events, doing {} sims instead of {}...".format(pbh.photon_df.shape[0], pbh.photon_df.shape[0] - 1, Nsim))
+        Nsim = pbh.photon_df.shape[0] - 1
+    # Nsim = 1000
+    ll_bkg_all = np.zeros((len(N_bursts), Nsim)).astype(float)
+    ll_sig_all = np.zeros((len(N_bursts), Nsim)).astype(float)
+    best_cuts = np.zeros(len(N_bursts))
+    fig, axes = plt.subplots(3, len(N_bursts)/3, figsize=(18, 18))
+
+    for xx, N_burst in enumerate(N_bursts):
+
+        for j in range(Nsim):
+            #pbh.scramble()
+
+            #
+            #this_slice = pbh.photon_df.iloc[j*N_burst:(j+1)*N_burst]
+            this_slice = pbh.photon_df.iloc[j:j+N_burst]
+            #rand_Es = this_slice.Es.values
+
+            #rand_bkg_coords = np.zeros((N_burst, 2))
+            rand_bkg_coords = np.array([this_slice.RAs, this_slice.Decs]).T
+            rand_sig_coords = np.zeros((N_burst, 2))
+            psfs = this_slice.psfs.values
+
+            fov_center, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
+
+            for i in range(N_burst):
+                psf_width = psfs[i]
+                rand_sig_theta = pbh.gen_one_random_theta(psf_width, prob="psf", fov=fov)
+                rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
+
+            cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
+            ll_bkg_all[xx, j] = ll_bkg
+            ll_sig_all[xx, j] = ll_sig
+
+        best_cuts[xx] = np.percentile(ll_sig_all[xx], 90)
+        axes.flatten()[xx].hist(ll_sig_all[xx], bins=sig_bins, color='r', alpha=0.3, label="Burst size " + str(N_burst) + " signal")
+        axes.flatten()[xx].hist(ll_bkg_all[xx], bins=bkg_bins, color='b', alpha=0.3, label="Burst size " + str(N_burst) + " background")
+        axes.flatten()[xx].axvline(x=best_cuts[xx], ls="--", lw=0.3, label="90% efficiency cut = {:.2f}".format(best_cuts[xx]))
+        axes.flatten()[xx].legend(loc='best')
+        axes.flatten()[xx].set_xlabel("Likelihood")
+        if ylog:
+            axes.flatten()[xx].set_yscale('log')
+    plt.tight_layout()
+    print(best_cuts)
     if filename is not None:
         plt.savefig(filename)
     plt.show()
