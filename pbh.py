@@ -68,8 +68,8 @@ class Pbh(object):
         #self.ll_cut_dict = {2:-8.637,3:-8.55,4:-8.564, 5:-8.614, 6:-8.656, 7:-8.7, 8:-8.737, 9:-8.767, 10:-8.794}
         # Dec=80 after cos correction, new cumtrapz integration, theta2 instead of theta
         #self.ll_cut_dict = {2:-6.68,3:-6.74,4:-6.71, 5:-6.76, 6:-6.8, 7:-6.84, 8:-6.88, 9:-6.92, 10:-6.96}
-        #new cuts using data (2017-06-13) 5 runs mean:
-        self.ll_cut_dict = {2:-6.96,3:-6.95,4:-6.96, 5:-7.0, 6:-7.04, 7:-7.08, 8:-7.12, 9:-7.16, 10:-7.19}
+        #new cuts using scrambled data (2017-06-13) 6 runs mean:
+        self.ll_cut_dict = {2:-6.95,3:-6.95,4:-6.96, 5:-6.99, 6:-7.03, 7:-7.07, 8:-7.12, 9:-7.16, 10:-7.18}
 
 
 
@@ -2751,6 +2751,27 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
         except:
             print("*** Can't process run: %d ***" % run_num)
             raise
+
+
+def filter_good_runlist():
+    df_run = pd.read_csv("batch_all_v3/runlist_Final.txt")
+    bad_runs = []
+    for run in df_run.values.flatten():
+        p_ = Pbh()
+        p_.readEDfile(run)
+        all_gamma_treeName = "run_" + str(run) + "/stereo/TreeWithAllGamma"
+        all_gamma_tree = p_.Rfile.Get(all_gamma_treeName)
+        es_ = []
+        for i, event in enumerate(all_gamma_tree):
+            if i > 100:
+                break
+            es_.append(event.Energy)
+
+        if np.mean(np.asarray(es_)) == -99:
+            print("Energy not filled for run {}".format(run))
+            bad_runs.append(run)
+
+    df_run[~df_run.run.isin(bad_runs)].to_csv("goodruns.txt", header=None, index=False)
 
 
 def jackknife_runlist(runlist="pbh_1-s_scramble_all_90eff_list.txt", num_samples=5, run=True, window_size=1,
