@@ -2753,15 +2753,27 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
             raise
 
 
-def filter_good_runlist():
-    df_run = pd.read_csv("batch_all_v3/runlist_Final.txt")
+def filter_good_runlist(infile="batch_all_v3/runlist_Final.txt", outfile="goodruns.txt"):
+    df_run = pd.read_csv(infile)
+    df_run.columns = ['run']
     bad_runs = []
+    no_ea = []
     for run in df_run.values.flatten():
         p_ = Pbh()
         p_.readEDfile(run)
         all_gamma_treeName = "run_" + str(run) + "/stereo/TreeWithAllGamma"
         all_gamma_tree = p_.Rfile.Get(all_gamma_treeName)
         es_ = []
+
+        ea_Name = "run_" + str(run) + "/stereo/EffectiveAreas/gMeanEffectiveArea"
+        ea = p_.Rfile.Get(ea_Name);
+        try:
+            ea.GetN()
+        except:
+            print("Empty EAs for run {}".format(run))
+            no_ea.append(run)
+            continue
+
         for i, event in enumerate(all_gamma_tree):
             if i > 100:
                 break
@@ -2771,7 +2783,12 @@ def filter_good_runlist():
             print("Energy not filled for run {}".format(run))
             bad_runs.append(run)
 
-    df_run[~df_run.run.isin(bad_runs)].to_csv("goodruns.txt", header=None, index=False)
+
+    good_run = df_run[~df_run.run.isin(bad_runs)]
+    good_run = good_run[~good_run.run.isin(no_ea)]
+    print("Saving {} good runs to file {}".format(good_run.shape[0], outfile))
+    good_run.to_csv(outfile, header=None, index=False)
+    return good_run
 
 
 def jackknife_runlist(runlist="pbh_1-s_scramble_all_90eff_list.txt", num_samples=5, run=True, window_size=1,
