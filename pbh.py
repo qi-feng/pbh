@@ -1523,11 +1523,13 @@ class Pbh_combined(Pbh):
         self.rho_dot_ULs[burst_size_threshold], ll_UL_ = self.get_ul_rho_dot(rho_dots, lls, minimum_ll, margin=1.e-5)
         return self.rho_dot_ULs
 
-    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True, show=False):
+    def plot_ll_vs_rho_dots(self, save_hist="ll_vs_rho_dots", xlog=True, grid=True, plot_hline=True, show=False, ylim=(0,25)):
         rho_dots=self.rho_dots
         fig = plt.figure()
         ax = fig.add_subplot(111)
         for b_ in self.burst_sizes_set:
+            if b_==1:
+                continue
             minimum_rho_dot, minimum_ll, rho_dots, lls = self.get_minimum_ll(b_, self.window_size, rho_dots=rho_dots, verbose=self.verbose)
             plt.plot(rho_dots, lls-minimum_ll, label="burst size "+str(b_)+", "+str(self.window_size)+"-s window")
         #plt.axvline(x=minimum_rho_dot, color="b", ls="--",
@@ -1537,6 +1539,7 @@ class Pbh_combined(Pbh):
         plt.xlabel(r"Rate density of PBH evaporation (pc$^{-3}$ yr$^{-1}$)")
         plt.ylabel(r"-2$\Delta$lnL")
         plt.legend(loc='best')
+        plt.ylim(ylim)
         if xlog:
             plt.xscale('log')
         if grid:
