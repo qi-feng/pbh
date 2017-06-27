@@ -2647,7 +2647,10 @@ def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
 
 def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
                      script_dir = '/raid/reedbuck/qfeng/pbh/', overwrite=True, hostname=None, walltime=48):
-    print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
+    if window_size<1:
+        print('Submitting jobs for runlist %s with search window size %.1g' % (filename, window_size))
+    else:
+        print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     #script_dir = '/raid/reedbuck/qfeng/pbh/'
 
@@ -2659,7 +2662,10 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
     for run_num in runlist:
         try:
             pyscriptname = "pbh.py"
-            scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
+            if window_size<1:
+                scriptname = 'pbhs_run%d_window_size%.4f-s.pbs' % (run_num, window_size)
+            else:
+                scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
             scriptfullname = os.path.join(script_dir, scriptname)
             pyscriptname = os.path.join(script_dir, pyscriptname)
             pklname = "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run_num)+"_window"+str(window_size)+"-s.pkl"
@@ -2672,7 +2678,10 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
                     continue
                     #sys.exit(1)
                 print('Overwriting...')
-            logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
+            if window_size < 1:
+                logfilename = 'pbhs_run%d_window_size%.4f-s.log' % (run_num, window_size)
+            else:
+                logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
             #script = open(scriptfullname, 'w')
             with open(scriptfullname, 'w') as script:
                 script.write('#PBS -e %s\n'%os.path.join(script_dir, 'qsub_%s.err'%scriptname))
@@ -2681,9 +2690,17 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
                 script.write('#PBS -l pvmem=5gb\n')
                 script.write('cd %s\n'%script_dir)
                 if plot:
-                    script.write('python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    if window_size<1:
+                        script.write('python %s -r %d -w %.4f -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    else:
+                        script.write('python %s -r %d -w %d -b %s -p >> %s\n' % (
+                        pyscriptname, run_num, window_size, bkg_method, logfilename))
                 else:
-                    script.write('python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    if window_size<1:
+                        script.write('python %s -r %d -w %.4f -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    else:
+                        script.write('python %s -r %d -w %d -b %s >> %s\n' % (
+                        pyscriptname, run_num, window_size, bkg_method, logfilename))
             script.close()
             #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
@@ -2697,7 +2714,10 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
 
 def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
                      script_dir = '/global/cscratch1/sd/qifeng/pbh/', overwrite=True, hostname=None, walltime=48):
-    print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
+    if window_size<1:
+        print('Submitting jobs for runlist %s with search window size %.1g' % (filename, window_size))
+    else:
+        print('Submitting jobs for runlist %s with search window size %.1f'%(filename, window_size))
     #data_base_dir = '/raid/reedbuck/veritas/data/'
     #script_dir = '/raid/reedbuck/qfeng/pbh/'
 
@@ -2709,7 +2729,11 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
     for run_num in runlist:
         try:
             pyscriptname = "pbh.py"
-            scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
+            if window_size<1:
+                scriptname = 'pbhs_run%d_window_size%.4f-s.pbs' % (run_num, window_size)
+            else:
+                scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
+            #scriptname = 'pbhs_run%d_window_size%d-s.pbs'%(run_num, window_size)
             scriptfullname = os.path.join(script_dir, scriptname)
             pyscriptname = os.path.join(script_dir, pyscriptname)
             pklname = "pbhs_bkg_method_"+str(bkg_method)+"_run"+str(run_num)+"_window"+str(window_size)+"-s.pkl"
@@ -2722,7 +2746,11 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
                     continue
                     #sys.exit(1)
                 print('Overwriting...')
-            logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
+            if window_size < 1:
+                logfilename = 'pbhs_run%d_window_size%.4f-s.log' % (run_num, window_size)
+            else:
+                logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
+            #logfilename = 'pbhs_run%d_window_size%d-s.log'%(run_num, window_size)
             #script = open(scriptfullname, 'w')
             with open(scriptfullname, 'w') as script:
                 script.write('#!/bin/bash -l \n\n')
@@ -2737,10 +2765,19 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
                 script.write('cd %s\n' % script_dir)
                 if plot:
                     #script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
-                    script.write('python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    #script.write('python %s -r %d -w %d -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    if window_size<1:
+                        script.write('python %s -r %d -w %.4f -b %s -p >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    else:
+                        script.write('python %s -r %d -w %d -b %s -p >> %s\n' % (
+                        pyscriptname, run_num, window_size, bkg_method, logfilename))
                 else:
                     #script.write('srun -n 1 -C haswell python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
-                    script.write('python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    if window_size<1:
+                        script.write('python %s -r %d -w %.4f -b %s >> %s\n' % (
+                        pyscriptname, run_num, window_size, bkg_method, logfilename))
+                    else:
+                        script.write('python %s -r %d -w %d -b %s >> %s\n'%(pyscriptname, run_num, window_size, bkg_method, logfilename))
             script.close()
             #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             #isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
@@ -2847,7 +2884,10 @@ if __name__ == "__main__":
 
     if options.run is not None:
         print('\n\n#########################################')
-        print('Processing run %d with search window size %.1f'%(options.run, options.window))
+        if options.window<1:
+            print('Processing run %d with search window size %.1g' % (options.run, options.window))
+        else:
+            print('Processing run %d with search window size %.1f'%(options.run, options.window))
         process_one_run(options.run, options.window, bkg_method=options.bkg_method, plot=options.plot)
 
     #test_singlet_remover()
