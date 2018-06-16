@@ -1039,7 +1039,11 @@ class Pbh(object):
         else:
             all_burst_sizes = range(burst_size_threshold,upper_burst_size+1)
         ll_ = 0.0
-        for burst_size in all_burst_sizes:
+        sum_nb = 0
+        self.good_burst_sizes=[] # use this to keep burst sizes that are large enough so that $n_b > \sum_b n_{b+1}$
+        #for burst_size in all_burst_sizes:
+        for burst_size in np.sort(np.array(all_burst_sizes))[::-1]:
+        # starting from the largest burst to test whether $n_b > \sum_b n_{b+1}$
             if burst_size >= burst_size_threshold:
                 Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
                 n_expected_ = self.n_excess(rho_dot, Veff_, verbose=verbose)
@@ -1049,7 +1053,14 @@ class Pbh(object):
                     self.avg_bkg_hist[burst_size] = 0
                 n_on_ = self.sig_burst_hist[burst_size]
                 n_off_ = self.avg_bkg_hist[burst_size]
+                if n_on_ < sum_nb:
+                    print("reached where n_b < \sum_b n_(b+1), at b={}".format(burst_size))
+                    print("Stopping")
+                    break
+                else:
+                    self.good_burst_sizes.append(burst_size)
                 ll_ += self.ll(n_on_, n_off_, n_expected_)
+                sum_nb += n_on_
                 if verbose:
                     #print("###############################################################################")
                     print("Adding -2lnL at burst size %d, for search window %.1f and rate density %.1f, so far -2lnL = %.2f" % (burst_size, t_window, rho_dot, ll_))
@@ -1167,7 +1178,7 @@ class Pbh(object):
 
         if error is None:
             sig_err = np.zeros(np.array(self.sig_burst_hist.values()).shape[0])
-            bkg_err = np.zeros(np.array(self.avg_bkg_hist.values()).hape[0])
+            bkg_err = np.zeros(np.array(self.avg_bkg_hist.values()).shape[0])
         elif error=="Poisson":
             sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float64'))
             bkg_err = np.sqrt(np.array(self.avg_bkg_hist.values()).astype('float64'))
@@ -1179,11 +1190,11 @@ class Pbh(object):
                 key_ = float(key_)
                 bkg_err[key_] = np.std(np.array([d[key_] for d in self.bkg_burst_hists if key_ in d]))
 
-        ax1.errorbar(self.sig_burst_hist.keys(), self.sig_burst_hist.values(), xerr=0.5,
-                         yerr=sig_err, fmt='bs', capthick=0,
+        ax1.errorbar(self.sig_burst_hist.keys()[1:], self.sig_burst_hist.values()[1:], xerr=0.5,
+                         yerr=sig_err[1:], fmt='bs', capthick=0,
                          label="Data")
-        ax1.errorbar(self.avg_bkg_hist.keys(), self.avg_bkg_hist.values(), xerr=0.5,
-                         yerr=bkg_err, fmt='rv', capthick=0,
+        ax1.errorbar(self.avg_bkg_hist.keys()[1:], self.avg_bkg_hist.values()[1:], xerr=0.5,
+                         yerr=bkg_err[1:], fmt='rv', capthick=0,
                          label="Background")
         plt.title(title)
         ax1.set_ylabel("Counts")
@@ -1202,7 +1213,7 @@ class Pbh(object):
 
         #plt.figure()
         ax2 = plt.subplot(3, 1, 3, sharex=ax1)
-        ax2.errorbar(residual_dict.keys(), residual_dict.values(), xerr=0.5, yerr=res_err, fmt='bs', capthick=0,
+        ax2.errorbar(residual_dict.keys()[1:], residual_dict.values()[1:], xerr=0.5, yerr=res_err[1:], fmt='bs', capthick=0,
                      label="Residual")
         ax2.axhline(y=0, color='gray', ls='--')
         ax2.set_xlabel("Burst size")
@@ -1464,7 +1475,10 @@ class Pbh_combined(Pbh):
         else:
             all_burst_sizes = range(burst_size_threshold,upper_burst_size+1)
         ll_ = 0.0
-        for burst_size in all_burst_sizes:
+        sum_nb = 0
+        self.good_burst_sizes=[] # use this to keep burst sizes that are large enough so that $n_b > \sum_b n_{b+1}$
+        for burst_size in np.sort(np.array(all_burst_sizes))[::-1]:
+        #for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
                 #Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
                 #print("Burst size %d " % burst_size)
@@ -1477,7 +1491,14 @@ class Pbh_combined(Pbh):
                     self.avg_bkg_hist[burst_size] = 0
                 n_on_ = self.sig_burst_hist[burst_size]
                 n_off_ = self.avg_bkg_hist[burst_size]
+                if n_on_ < sum_nb:
+                    print("reached where n_b < \sum_b n_(b+1), at b={}".format(burst_size))
+                    print("Stopping")
+                    break
+                else:
+                    self.good_burst_sizes.append(burst_size)
                 ll_ += self.ll(n_on_, n_off_, n_expected_)
+                sum_nb += n_on_
                 if verbose:
                     #print("###############################################################################")
                     print("Adding -2lnL at burst size %d, for search window %.1f and rate density %.1f, so far -2lnL = %.2f" % (burst_size, t_window, rho_dot, ll_))
@@ -1487,6 +1508,8 @@ class Pbh_combined(Pbh):
             print("-2lnL above burst size %d, for search window %.1f and rate density %.1f is %.2f" % (burst_size_threshold, t_window, rho_dot, ll_))
             print("###############################################################################")
         return ll_
+
+
 
     #@autojit
     def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
@@ -2185,6 +2208,25 @@ def plot_Veff(pbh, window_sizes=[1, 10, 100], burst_sizes=range(2,11), lss=['-',
         plt.savefig(filename, dpi=300)
     plt.show()
 
+def plot_Veff_step(pbh, window_sizes=[1, 10, 100], burst_sizes=range(2,11), lss=['-', ':', '--'], cs=['r', 'b', 'k'],
+              draw_grid=True, filename="Effective_volume.png"):
+    for i, window_ in enumerate(window_sizes):
+        Veffs=[]
+        for b in burst_sizes:
+            Veffs.append(pbh.V_eff(b, window_))
+        plt.step(burst_sizes, Veffs, color=cs[i], where='mid', linestyle=lss[i], label=(r"$\Delta$t = %d s" % window_))
+    if draw_grid:
+        plt.grid(b=True)
+    plt.yscale('log')
+    plt.xlabel("Burst size")
+    plt.ylabel(r"Effective volume (pc$^3$)")
+    plt.legend(loc='best')
+    plt.ylim(1e-4,1.1)
+    if filename is not None:
+        plt.savefig(filename)
+    plt.show()
+
+
 
 def plot_residual_vs_n_expected(pbhs, rho_dots, colors=None, draw_grid=True, ylim=None,
                                 filename="residual_vs_n_expected.png", show=True, ylog=False):
@@ -2347,7 +2389,7 @@ def combine_from_pickle_list(listname, window_size, filetag="", burst_size_thres
     print("The effective volume above burst size 2 is %.6f pc^3" % (pbhs_combined_all_.effective_volumes[2]))
     print("There are %d runs in total" % (len(pbhs_combined_all_.runNums)))
     total_N_runs = len(pbhs_combined_all_.runNums)
-    pbhs_combined_all_.plot_burst_hist(filename="burst_hists_test_"+str(filetag)+"_window"+str(window_size)+"-s_all"+str(total_N_runs)+"runs", title="Burst histogram "+str(window_size)+"-s window "+str(total_N_runs)+" runs", plt_log=True, error="Poisson")
+    pbhs_combined_all_.plot_burst_hist(filename="burst_hists_test_"+str(filetag)+"_window"+str(window_size)+"-s_all"+str(total_N_runs)+"runs.png", title="Burst histogram "+str(window_size)+"-s window "+str(total_N_runs)+" runs", plt_log=True, error="Poisson")
     pbhs_combined_all_.plot_ll_vs_rho_dots(save_hist="ll_vs_rho_dots_test_"+str(filetag)+"_window"+str(window_size)+"-s_all"+str(total_N_runs)+"runs")
     return pbhs_combined_all_
 
