@@ -1042,7 +1042,7 @@ class Pbh(object):
         sum_nb = 0
         self.good_burst_sizes=[] # use this to keep burst sizes that are large enough so that $n_b > \sum_b n_{b+1}$
         #for burst_size in all_burst_sizes:
-        for burst_size in np.sort(np.array(all_burst_sizes))[::-1]:
+        for burst_size in np.sort(np.array(list(all_burst_sizes)))[::-1]:
         # starting from the largest burst to test whether $n_b > \sum_b n_{b+1}$
             if burst_size >= burst_size_threshold:
                 Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
@@ -1477,7 +1477,7 @@ class Pbh_combined(Pbh):
         ll_ = 0.0
         sum_nb = 0
         self.good_burst_sizes=[] # use this to keep burst sizes that are large enough so that $n_b > \sum_b n_{b+1}$
-        for burst_size in np.sort(np.array(all_burst_sizes))[::-1]:
+        for burst_size in np.sort(np.array(list(all_burst_sizes)))[::-1]:
         #for burst_size in all_burst_sizes:
             if burst_size >= burst_size_threshold:
                 #Veff_ = self.V_eff(burst_size, t_window, verbose=verbose)
