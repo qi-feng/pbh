@@ -685,7 +685,7 @@ class Pbh(object):
             return None, slice_index
         N_ = self.photon_df.shape[0]
         slice_tuple = tuple(slice_index[:, np.newaxis].T)
-        coord_slice = np.concatenate([self.photon_df.RAs.reshape(N_, 1), self.photon_df.Decs.reshape(N_, 1)], axis=1)[
+        coord_slice = np.concatenate([self.photon_df.RAs.values.reshape(N_, 1), self.photon_df.Decs.values.reshape(N_, 1)], axis=1)[
             slice_tuple]
         psf_slice = self.photon_df.psfs.values[slice_tuple]
         #default all events are singlet
@@ -746,7 +746,7 @@ class Pbh(object):
             return None, None
 
         ang_search_res = self.search_angular_window(
-            np.concatenate([self.photon_df.RAs.reshape(N_, 1), self.photon_df.Decs.reshape(N_, 1)], axis=1)[
+            np.concatenate([self.photon_df.RAs.values.reshape(N_, 1), self.photon_df.Decs.values.reshape(N_, 1)], axis=1)[
                 tuple(slice_index[:, np.newaxis].T)], self.photon_df.psfs.values[tuple(slice_index[:, np.newaxis].T)],
             slice_index)
         outlier_evts = []
@@ -769,7 +769,7 @@ class Pbh(object):
                 #print tuple(_better_events), _better_events
                 #better_coords = np.concatenate([self.photon_df.RAs.reshape(N_,1), self.photon_df.Decs.reshape(N_,1)], axis=1)[tuple(_better_events)]
                 better_coords = \
-                    np.concatenate([self.photon_df.RAs.reshape(N_, 1), self.photon_df.Decs.reshape(N_, 1)], axis=1)[
+                    np.concatenate([self.photon_df.RAs.values.reshape(N_, 1), self.photon_df.Decs.values.reshape(N_, 1)], axis=1)[
                         (_better_events)]
                 #print "in search_event_slice, candidate coords and psfs: ", better_coords, self.photon_df.psfs.values[(_better_events)]
                 ang_search_res = self.search_angular_window(better_coords,
