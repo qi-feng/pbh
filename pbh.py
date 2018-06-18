@@ -3026,7 +3026,7 @@ if __name__ == "__main__":
                          bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
         elif options.tehanu:
             qsub_tehanu_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
-                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
+                         bkg_method=options.bkg_method, overwrite=options.overwrite, walltime=options.walltime)
         else:
             qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
                          bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
