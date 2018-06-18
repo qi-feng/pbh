@@ -2912,9 +2912,9 @@ def qsub_tehanu_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, 
             with open(condor_scriptname, 'w') as condor_script:
                 condor_script.write('Universe  = vanilla \n')
                 condor_script.write('Executable = {} \n'.format(scriptfullname))
-                condor_script.write('Log = " {}.log \n'.format(scriptfullname.split('/')[:-1]))
-                condor_script.write('Error =  {}.err \n'.format(scriptfullname.split('/')[:-1]))
-                condor_script.write('Output =  {}.out \n'.format(scriptfullname.split('/')[:-1]))
+                condor_script.write('Log = {}/condor_{}.log \n'.format('/'.join(scriptfullname.split('/')[:-2]), '.'.join(logfilename.split('.')[:-1]) ))
+                condor_script.write('Error =  {}/condor_{}.err \n'.format('/'.join(scriptfullname.split('/')[:-2]), '.'.join(logfilename.split('.')[:-1]) ))
+                condor_script.write('Output =  {}/condor_{}.out \n'.format('/'.join(scriptfullname.split('/')[:-2]), '.'.join(logfilename.split('.')[:-1]) ))
                 condor_script.write('should_transfer_files = YES \n')
                 condor_script.write('WhenToTransferOutput = ON_EXIT \n')
                 #condor_script.write('Requirements = (machine == \"tehanu.nevis.columbia.edu\" || machine== \"ged.nevis.columbia.edu\" || machine== \"serret.nevis.columbia.edu\") \n')
