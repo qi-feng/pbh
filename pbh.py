@@ -2909,7 +2909,7 @@ def qsub_tehanu_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, 
                 script.write('whoami \n')
                 script.write('date \n')
 
-            with open(scriptfullname, 'w') as condor_script:
+            with open(condor_scriptname, 'w') as condor_script:
                 condor_script.write('Universe  = vanilla \n')
                 condor_script.write('Executable = {} \n'.format(scriptfullname))
                 condor_script.write('Log = " {} \n'.format(os.path.join(script_dir, 'qsub_%s.log' % scriptname)))
@@ -2926,7 +2926,7 @@ def qsub_tehanu_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, 
             #isend_command = 'qsub -l nodes=reedbuck -q batch -V %s'%scriptfullname
             #isend_command = 'qsub -l nodes=%s -q batch -V %s'%(hostname, scriptfullname)
             #isend_command = 'sbatch -C haswell %s'%(scriptfullname)
-            isend_command = 'condor_submit {}'.format(scriptfullname)
+            isend_command = 'condor_submit {}'.format(condor_scriptname)
 
 
 
@@ -3014,6 +3014,7 @@ if __name__ == "__main__":
     parser.add_option("-m","--makeup", action="store_false", dest="overwrite", default=True)
     parser.add_option("-t","--walltime",dest="walltime", type="int", default=48)
     parser.add_option("-c","--cori", action="store_true", dest="cori", default=False)
+    parser.add_option("--tehanu", action="store_true", dest="tehanu", default=False)
     #parser.add_option("--rho_dots",dest="rho_dots", default=np.arange(0, 2e7, 1e4))
     #parser.add_option("-inner","--innerHi",dest="innerHi",default=True)
     (options, args) = parser.parse_args()
@@ -3022,6 +3023,9 @@ if __name__ == "__main__":
         #print('Submitting jobs for runlist %s with search window size %.1f'%(options.runlist, options.window))
         if options.cori:
             qsub_cori_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
+                         bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
+        elif options.tehanu:
+            qsub_tehanu_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
                          bkg_method=options.bkg_method, script_dir=os.getcwd(), overwrite=options.overwrite, walltime=options.walltime)
         else:
             qsub_job_runlist(filename=options.runlist, window_size=options.window, plot=options.plot,
