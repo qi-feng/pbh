@@ -2,30 +2,27 @@ __author__ = 'qfeng'
 
 import numpy as np
 import matplotlib.pyplot as plt
-import os
-import pandas as pd
-from scipy.optimize import curve_fit, minimize
-from scipy import stats
-import random
 
-from scipy.stats import chisquare
-from scipy.special import factorial, gamma
+from scipy.optimize import curve_fit, minimize
 from scipy.stats import poisson, chi2
 from scipy.stats import norm
 
+
 def gaus(x, *p):
     A, mu, sigma = p
-    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+    return A * np.exp(-(x - mu) ** 2 / (2. * sigma ** 2))
+
 
 def poisson_pdf(x, u, log=False):
     """
     The probability of observing x events given the expected number of events is u
     """
-    #return np.exp(-u)*(u**x)/factorial(x)
-    #return np.exp(-u)*(u**x)/gamma(x+1)
+    # return np.exp(-u)*(u**x)/factorial(x)
+    # return np.exp(-u)*(u**x)/gamma(x+1)
     if log:
         return poisson.logpmf(x, u)
     return poisson.pmf(x, u)
+
 
 def counting_pdf(x, y, u, b, tau=1, log=False):
     """
@@ -34,38 +31,43 @@ def counting_pdf(x, y, u, b, tau=1, log=False):
     Note alpha is 1 here.
     """
     if log:
-        return (poisson_pdf(x, u+b, log=True))+(poisson_pdf(y, tau*b, log=True))
-    return poisson_pdf(x, u+b)*poisson_pdf(y, tau*b)
+        return (poisson_pdf(x, u + b, log=True)) + (poisson_pdf(y, tau * b, log=True))
+    return poisson_pdf(x, u + b) * poisson_pdf(y, tau * b)
+
 
 def likeihood_ratio(u, x, y, tau=1):
     # Rolke's UL assuming simple Poisson for on (X) and off (Y) with eff=1.
-    #maximizing likelihood function over both u and b, we have
-    #MLE u_hat=x-y/tau, b_hat=y/tau, where x is the observed ON counts, and y OFF, and tau=1./alpha;
-    #while given u, maximizing likelihood function over b, we have
-    #b_hat(u) = (x+y-(1.+tau)*u+np.sqrt((x+y-(1.+tau)*u)**2+4.*(1.+tau)*y*u))/2./(1.+tau)
-    b_hat_u = (x+y-(1.+tau)*u+np.sqrt((x+y-(1.+tau)*u)**2+4.*(1.+tau)*y*u))/2./(1.+tau)
-    return counting_pdf(x, y, u, b_hat_u, tau=tau)*1.0/counting_pdf(x, y, x-y, y, tau=tau)
+    # maximizing likelihood function over both u and b, we have
+    # MLE u_hat=x-y/tau, b_hat=y/tau, where x is the observed ON counts, and y OFF, and tau=1./alpha;
+    # while given u, maximizing likelihood function over b, we have
+    # b_hat(u) = (x+y-(1.+tau)*u+np.sqrt((x+y-(1.+tau)*u)**2+4.*(1.+tau)*y*u))/2./(1.+tau)
+    b_hat_u = (x + y - (1. + tau) * u + np.sqrt((x + y - (1. + tau) * u) ** 2 + 4. * (1. + tau) * y * u)) / 2. / (
+            1. + tau)
+    return counting_pdf(x, y, u, b_hat_u, tau=tau) * 1.0 / counting_pdf(x, y, x - y, y, tau=tau)
 
 
 class UL_on_off(object):
     """
     UL class from known ON, OFF
     """
+
     def __init__(self, x, y, tau=1.0):
-        self.ul=0.0
-        #x is measured number of ON events in the signal region
-        self.x=x
-        #y is measured number of OFF events in bkg region
-        self.y=y
-        #tau is 1./alpha
-        self.tau=tau
+        self.ul = 0.0
+        # x is measured number of ON events in the signal region
+        self.x = x
+        # y is measured number of OFF events in bkg region
+        self.y = y
+        # tau is 1./alpha
+        self.tau = tau
 
     def set_us(self, us):
-        #us is the range of expected signal to search for likelihood
+        # us is the range of expected signal to search for likelihood
         self.us = us
+
     def set_bs(self, bs):
-        #us is the range of expected bkg to search for likelihood
+        # us is the range of expected bkg to search for likelihood
         self.bs = bs
+
     def make_mesh(self, us=None, bs=None):
         if us is not None:
             self.set_us(us)
@@ -76,7 +78,7 @@ class UL_on_off(object):
             self.Z = np.zeros((self.us.shape[0], self.bs.shape[0]))
             for i, u in enumerate(self.us):
                 for j, b in enumerate(self.bs):
-                    self.Z[i,j] = counting_pdf(self.x, self.y, u, b, self.tau)
+                    self.Z[i, j] = counting_pdf(self.x, self.y, u, b, self.tau)
             self.Z = np.nan_to_num(self.Z)
         else:
             print("Set us and bs first!")
@@ -91,13 +93,13 @@ class UL_on_off(object):
         self.cdfs = np.sum(self.Z, axis=1)
         self.cdfs_off = np.sum(self.Z, axis=0)
 
-    def fit_gaus(self, p0 = [1.e-2, 0., 1.], bkg=False):
-        #bounds=((0, 0, 0), (np.inf, np.inf, np.inf))
+    def fit_gaus(self, p0=[1.e-2, 0., 1.], bkg=False):
+        # bounds=((0, 0, 0), (np.inf, np.inf, np.inf))
         if not hasattr(self, 'cdfs'):
             self.get_marginal()
         # p0 is the initial guess for the fitting coefficients (A, mu and sigma above)
         if not bkg:
-            #popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0, bounds=bounds)
+            # popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0, bounds=bounds)
             popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0)
             self.fit_A, self.fit_mu, self.fit_sigma = popt
             self.fit_A = abs(self.fit_A)
@@ -106,7 +108,7 @@ class UL_on_off(object):
             self.fit_dA, self.fit_dmu, self.fit_dsigma = np.sqrt(np.diag(pcov))
             return self.fit_A, self.fit_mu, self.fit_sigma
         else:
-            #popt, pcov = curve_fit(gaus, us, cdfs, p0=p0, bounds=bounds)
+            # popt, pcov = curve_fit(gaus, us, cdfs, p0=p0, bounds=bounds)
             popt, pcov = curve_fit(gaus, self.us, self.cdfs, p0=p0)
             self.fit_A_off, self.fit_mu_off, self.fit_sigma_off = popt
             self.fit_A_off = abs(self.fit_A_off)
@@ -126,8 +128,8 @@ class UL_on_off(object):
             self.fit_gaus()
         self.norm_negative = norm.cdf(0, loc=self.fit_mu, scale=self.fit_sigma)
         self.norm_positive = 1. - self.norm_negative
-        self.ul = norm.ppf(self.norm_negative + cl*self.norm_positive, loc=self.fit_mu, scale=self.fit_sigma)
-        print("Helene's (also Hanna's) %d%% UL is %.2f" % (cl*100, self.ul))
+        self.ul = norm.ppf(self.norm_negative + cl * self.norm_positive, loc=self.fit_mu, scale=self.fit_sigma)
+        print("Helene's (also Hanna's) %d%% UL is %.2f" % (cl * 100, self.ul))
         return self.ul
 
     def get_sig_pdf(self, x):
@@ -137,31 +139,33 @@ class UL_on_off(object):
         ll_thresh = chi2.ppf(cl, 1)
         lls = []
         for u in self.us:
-            ll_ = -2.*np.log(likeihood_ratio(u, self.x, self.y))
+            ll_ = -2. * np.log(likeihood_ratio(u, self.x, self.y))
             lls.append(ll_)
         lls = np.array(lls)
-        slice_ = np.where(abs(lls-ll_thresh)<tol)
-        if lls[slice_].shape[0]==2:
-            print("Rolke's %d%% confidence range: %.2f - %.2f" % (cl*100, self.us[slice_][0], self.us[slice_][1]))
+        slice_ = np.where(abs(lls - ll_thresh) < tol)
+        if lls[slice_].shape[0] == 2:
+            print("Rolke's %d%% confidence range: %.2f - %.2f" % (cl * 100, self.us[slice_][0], self.us[slice_][1]))
             self.ul = self.us[slice_]
             return self.us[slice_]
-        elif lls[slice_].shape[0]==1:
-            print("Found one Rolke's %d%% confidence limit: %.2f" % (cl*100, self.us[slice_]))
+        elif lls[slice_].shape[0] == 1:
+            print("Found one Rolke's %d%% confidence limit: %.2f" % (cl * 100, self.us[slice_]))
             self.ul = self.us[slice_]
             return self.us[slice_]
-        elif lls[slice_].shape[0]>2:
+        elif lls[slice_].shape[0] > 2:
             tol /= 10.
             self.get_Rolke_UL(cl=cl, tol=tol)
-        elif lls[slice_].shape[0]==0:
+        elif lls[slice_].shape[0] == 0:
             tol *= 5.
             self.get_Rolke_UL(cl=cl, tol=tol)
 
+
 def test():
     ul1 = UL_on_off(44710., 44302.)
-    ul1.search_mesh(us=np.arange(-500, 1300), bs=np.arange(43500, 45000), p0 = [1.e-3, 408., 300.])
-    print ul1.get_H_UL()
-    print ul1.get_Rolke_UL()
+    ul1.search_mesh(us=np.arange(-500, 1300), bs=np.arange(43500, 45000), p0=[1.e-3, 408., 300.])
+    print(ul1.get_H_UL())
+    print(ul1.get_Rolke_UL())
     return ul1
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     test()
