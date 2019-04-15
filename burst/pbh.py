@@ -12,20 +12,18 @@ from scipy import integrate
 from scipy.special import gamma
 
 from burst.io import *
+from burst.io import load_run_summary, load_gamma_tree, load_irfs
 
 sys.setrecursionlimit(50000)
-
-try:
-    import ROOT
-
-    ROOT.PyConfig.StartGuiThread = False
-except:
-    print("Can't import ROOT, no related functionality possible")
 
 
 class Pbh(object):
     # Class for one run
-    def __init__(self):
+    def __init__(self, using_ed=True, data_dir='/a/data/tehanu/qifeng/pbh/EDroot_files/', veritas_deadtime_ms=0.33e-3):
+        self.using_ed = True  # if false use VEGAS
+        self.data_dir = data_dir
+        self.veritas_deadtime_ms = veritas_deadtime_ms
+
         # the cut on -2lnL, consider smaller values accepted for events coming from the same centroid
         # selected based on sims at 90% efficiency
         # self.ll_cut = -9.5
@@ -48,10 +46,10 @@ class Pbh(object):
         # 4 rows are Energy bins 0.08 to 0.32 TeV (row 0), 0.32 to 0.5 TeV, 0.5 to 1 TeV, and 1 to 50 TeV
         # 3 columns are Elevation bins 50-70 (column 0), 70-80 80-90 degs
         self.psf_lookup = np.zeros((4, 3)).astype('float')
-        self.E_grid = np.array([0.08, 0.32, 0.5, 1.0, 50.0])
-        self.EL_grid = np.array([50.0, 70.0, 80., 90.])
+        self.energy_grid_tev = np.array([0.08, 0.32, 0.5, 1.0, 50.0])
+        self.elevation_grid_deg = np.array([50.0, 70.0, 80., 90.])
         # for later reference
-        # self.E_bins=np.digitize(self.BDT_ErecS, self.E_grid)-1
+        # self.E_bins=np.digitize(self.BDT_ErecS, self.energy_grid_tev)-1
         # self.Z_bins=np.digitize((90.-self.BDT_Elevation), self.Zen_grid)-1
         #  0.08 to 0.32 TeV
         #  the 3 elements are Elevation 50-70, 70-80 80-90 degs
@@ -62,26 +60,34 @@ class Pbh(object):
         self.psf_lookup[2, :] = np.array([0.041, 0.035, 0.034])
         #   1 to 50 TeV
         self.psf_lookup[3, :] = np.array([0.031, 0.028, 0.027])
-        self._burst_dict = {}  # {"Burst #": [event # in this burst]}, for internal use
-        self.VERITAS_deadtime = 0.33e-3  # 0.33ms
-        self.runNum = 0
-        # self.data_dir = '/raid/reedbuck/qfeng/pbh/data'
-        self.data_dir = '/a/data/tehanu/qifeng/pbh/EDroot_files/'
-        # self.data_dir = '/global/cscratch1/sd/qifeng/data/pbh_data/'
 
-    def read_photon_list(self, ts, RAs, Decs, Es, ELs):
+        self._burst_dict = {}  # {"Burst #": [event # in this burst]}, for internal use
+
+        self.run_number = 0
+        self.runlist = []
+        self.bad_runs = []
+
+        self.energy_low_cut = 0.08
+        self.energy_hight_cut = 50.0
+        self.elevation_low_cut = 50.0
+        self.distance_upper_cut = 1.5
+        self.nlines = None
+
+    def read_photon_list(self, ts, right_ascensions, declinations, energies, elevations):
         N_ = len(ts)
-        assert N_ == len(RAs) and N_ == len(Decs) and N_ == len(Es) and N_ == len(ELs), \
-            "Make sure input lists (ts, RAs, Decs, Es, ELs) are of the same dimension"
-        columns = ['MJDs', 'ts', 'RAs', 'Decs', 'Es', 'ELs', 'psfs', 'burst_sizes', 'fail_cut']
+        assert N_ == len(right_ascensions) and N_ == len(declinations) and N_ == len(energies) and N_ == len(
+            elevations), \
+            "Make sure input lists (ts, right_ascensions, declinations, energies, elevations) are of the same dimension"
+        columns = ['MJDs', 'ts', 'right_ascensions', 'declinations', 'energies', 'elevations', 'psfs', 'burst_sizes',
+                   'fail_cut']
         df_ = pd.DataFrame(np.array([np.zeros(N_)] * len(columns)).T,
                            columns=columns)
         df_.ts = ts
-        df_.RAs = RAs
-        df_.Decs = Decs
-        df_.Es = Es
-        df_.ELs = ELs
-        # df_.coords = np.concatenate([df_.RAs.reshape(N_,1), df_.Decs.reshape(N_,1)], axis=1)
+        df_.RAs = right_ascensions
+        df_.Decs = declinations
+        df_.Es = energies
+        df_.ELs = elevations
+        # df_.coords = np.concatenate([df_.right_ascensions.reshape(N_,1), df_.declinations.reshape(N_,1)], axis=1)
         df_.psfs = np.zeros(N_)
         df_.burst_sizes = np.ones(N_)
         # self.photon_df = df_
@@ -94,129 +100,46 @@ class Pbh(object):
 
         self.get_psf_lists()
 
-    def readEDfile(self, runNum=None, filename=None, dir=None):
-        if dir is None:
-            dir = self.data_dir
-        self.runNum = runNum
-        self.filename = str(dir) + "/" + str(runNum) + ".anasum.root"
-        if not os.path.isfile(self.filename) and filename is not None:
-            if os.path.isfile(filename):
-                self.filename = filename
-        self.Rfile = ROOT.TFile(self.filename, "read");
-
-    def get_TreeWithAllGamma(self, runNum=None, E_lo_cut=0.08, E_hi_cut=50.0, EL_lo_cut=50.0, distance_upper_cut=1.5,
-                             nlines=None):
+    def get_tree_with_all_gamma(self, run_number=None):
         """
-        :param runNum:
+        :param run_number:
         :return: nothing but fills photon_df, except photon_df.burst_sizes
         """
-        if not hasattr(self, 'Rfile'):
-            print("No file has been read.")
-            if runNum is not None:
-                try:
-                    self.readEDfile(runNum=runNum)
-                    print("Read file " + self.filename + "...")
-                except:
-                    print("Can't read file with runNum " + str(runNum))
-                    raise
-            else:
-                print("Run self.readEDfile(\"rootfile\") first; or provide a runNum")
-                raise Exception("No Run Number")
-        all_gamma_treeName = "run_" + str(self.runNum) + "/stereo/TreeWithAllGamma"
-        # pointingData_treeName = "run_"+str(self.runNum)+"/stereo/pointingDataReduced"
-        all_gamma_tree = self.Rfile.Get(all_gamma_treeName)
-        # pointingData = self.Rfile.Get(pointingData_treeName)
-        # ptTime=[]
-        # for ptd in pointingData:
-        #    ptTime.append(ptd.Time);
-        # ptTime=np.array(ptTime)
-        # columns=['runNumber','eventNumber', 'MJD', 'Time', 'Elevation', ]
-        columns = ['MJDs', 'ts', 'RAs', 'Decs', 'Es', 'ELs', 'psfs', 'burst_sizes', 'fail_cut']
-        # EA is a function of energy, zenith, wobble offset, optical efficiency, and reconstructed camera coords
-        if nlines is not None:
-            N_ = nlines
-        else:
-            N_ = all_gamma_tree.GetEntries()
-        df_ = pd.DataFrame(np.array([np.zeros(N_)] * len(columns)).T,
-                           columns=columns)
-        ###QF short breaker:
-        # breaker = 0
-        # self.alltimes for the use of scramble (will be in random order, sort it to get true all times)
-        self.all_times = np.zeros(N_)
-        i_gamma = 0
-        for i, event in enumerate(all_gamma_tree):
-            # if nlines is not None:
-            #    if breaker >= nlines:
-            #        break
-            #    breaker += 1
-            # time_index=np.argmax(ptTime>event.Time)
-            # making cut:
-            # this is quite essential to double check!!!
-            self.all_times[i] = event.timeOfDay
-            distance = np.sqrt(event.Xderot * event.Xderot + event.Yderot * event.Yderot)
-            if (event.Energy < E_lo_cut) or (event.Energy > E_hi_cut) or (event.TelElevation < EL_lo_cut) or (
-                    event.IsGamma == 0) or (distance > distance_upper_cut):
-                df_.fail_cut.at[i] = 1
-                continue
-            i_gamma += 1
-            # fill the pandas dataframe
-            df_.MJDs[i] = event.dayMJD
-            # df_.eventNumber[i] = event.eventNumber
-            df_.ts[i] = event.timeOfDay
-            df_.RAs[i] = event.GammaRA
-            df_.Decs[i] = event.GammaDEC
-            df_.Es[i] = event.Energy
-            df_.ELs[i] = event.TelElevation
 
-        print("There are %d events, %d of which are gamma-like and pass cuts" % (N_, i_gamma))
-        self.N_all_events = N_
-        self.N_gamma_events = i_gamma
-        # df_.coords = np.concatenate([df_.RAs.reshape(N_,1), df_.Decs.reshape(N_,1)], axis=1)
-        df_.psfs = np.zeros(N_)
+        if run_number is not None:
+            self.run_number = run_number
+            try:
+                df_ = load_gamma_tree(self)
+                print("Read run number {0:d}".format(self.run_number))
+            except:
+                raise Exception("Can't read file with run_number " + str(run_number))
+        else:
+            raise Exception("Read a root file first; or provide a run_number")
+
+        print("There are %d events, %d of which are gamma-like and pass cuts" % (self.N_all_events, self.N_gamma_events))
+
+        df_.psfs = np.zeros(self.N_all_events)
+
         # by def all events are at least a singlet
-        df_.burst_sizes = np.ones(N_)
-        # self.photon_df = df_
+        df_.burst_sizes = np.ones(self.N_all_events)
+
         # clean events that did not pass cut:
         self.photon_df = df_[df_.fail_cut == 0]
+
         # reindexing
         self.photon_df.index = range(self.photon_df.shape[0])
 
         self.get_psf_lists()
 
-        # If
-        # df = df[df.line_race.notnull()]
-
-        ###QF
-        # print self.photon_df.head()
-
-    def getRunSummary(self):
-        tRunSumName = "total_1/stereo/tRunSummary"
-        tRunSummary = self.Rfile.Get(tRunSumName)
-        for tR in tRunSummary:
-            self.tOn = tR.tOn
-            self.Rate = tR.Rate
-            self.RateOff = tR.RateOff
-            self.DeadTimeFracOn = tR.DeadTimeFracOn
-            self.TargetRA = tR.TargetRA
-            self.TargetDec = tR.TargetDec
-            self.TargetRAJ2000 = tR.TargetRAJ2000
-            self.TargetDecJ2000 = tR.TargetDecJ2000
-            break
+    def get_run_summary(self):
+        load_run_summary(self)
         self.total_time_year = (self.tOn * (1. - self.DeadTimeFracOn)) / 31536000.
-        ea_Name = "run_" + str(self.runNum) + "/stereo/EffectiveAreas/gMeanEffectiveArea"
-        ea = self.Rfile.Get(ea_Name);
-        self.EA = np.zeros((ea.GetN(), 2))
-        for i in range(ea.GetN()):
-            self.EA[i, 0] = ea.GetX()[i]
-            self.EA[i, 1] = ea.GetY()[i]
 
-        accept_Name = "run_" + str(self.runNum) + "/stereo/RadialAcceptances/fAccZe_0"
-        self.accept = self.Rfile.Get(accept_Name);
-        # use self.accept.Eval(x) to get y, or just self.accept(x)
+        load_irfs(self)
 
     def scramble(self, copy=True, all_events=True):
         if not hasattr(self, 'photon_df'):
-            print("Call get_TreeWithAllGamma first...")
+            print("Call get_tree_with_all_gamma first...")
         if copy:
             # if you want to keep the original burst_dict, this should only happen at the 1st scramble
             if not hasattr(self, 'photon_df_orig'):
@@ -246,13 +169,18 @@ class Pbh(object):
         use 1/delta_t as the expected Poisson rate for each event
         """
         if not hasattr(self, 'photon_df'):
-            print("Call get_TreeWithAllGamma first...")
-        if copy:
-            # if you want to keep the original burst_dict, this should only happen at the 1st scramble
-            if not hasattr(self, 'photon_df_orig'):
-                self.photon_df_orig = self.photon_df.copy()
+            print("Call get_tree_with_all_gamma first...")
+
+        # if you want to keep the original burst_dict, this should only happen at the 1st scramble
+        if copy and (not hasattr(self, 'photon_df_orig')):
+            self.photon_df_orig = self.photon_df.copy()
+
+        # at the oment this is only defined for rate == "cell" yet the default is "avg"
         if rate == "cell":
             delta_ts = np.diff(self.photon_df.ts)
+        else:
+            raise Exception("rate not define for type {0:s}".format(rate))
+
         # for i, _delta_t in enumerate(delta_ts):
         if all_events:
             N = self.N_all_events
@@ -262,6 +190,7 @@ class Pbh(object):
             N = self.photon_df.shape[0]
             rate_expected = N * 1.0 / (self.photon_df.ts.values[-1] - self.photon_df.ts.values[0])
         print("Mean expected rate is %.2f" % rate_expected)
+
         for i in range(N - 1):
             if rate == "cell":
                 rate_expected = 1. / delta_ts[i]
@@ -270,7 +199,7 @@ class Pbh(object):
                 _rando_delta_t = np.random.exponential(1. / rate_expected)
                 inf_loop_preventer = 0
                 inf_loop_bound = 100
-                while _rando_delta_t < self.VERITAS_deadtime:
+                while _rando_delta_t < self.veritas_deadtime_ms:
                     _rando_delta_t = np.random.exponential(1. / rate_expected)
                     inf_loop_preventer += 1
                     if inf_loop_preventer > inf_loop_bound:
@@ -282,7 +211,7 @@ class Pbh(object):
                 _rando_delta_t = np.random.exponential(1. / rate_expected)
                 inf_loop_preventer = 0
                 inf_loop_bound = 100
-                while _rando_delta_t < self.VERITAS_deadtime:
+                while _rando_delta_t < self.veritas_deadtime_ms:
                     _rando_delta_t = np.random.exponential(1. / rate_expected)
                     inf_loop_preventer += 1
                     if inf_loop_preventer > inf_loop_bound:
@@ -319,9 +248,9 @@ class Pbh(object):
 
     # use hard coded width table from the hyperbolic secant function
     def get_psf(self, E=0.1, EL=80):
-        E_bin = np.digitize(E, self.E_grid, right=True) - 1
-        EL_bin = np.digitize(EL, self.EL_grid, right=True) - 1
-        return self.psf_lookup[E_bin, EL_bin]
+        energy_bin = np.digitize(E, self.energy_grid_tev, right=True) - 1
+        elevation_bin = np.digitize(EL, self.elevation_grid_deg, right=True) - 1
+        return self.psf_lookup[energy_bin, elevation_bin]
 
     # @autojit
     def get_psf_lists(self):
@@ -330,7 +259,7 @@ class Pbh(object):
         :return: nothing but filles photon_df.psfs, a number that is repeatedly used later
         """
         if not hasattr(self, 'photon_df'):
-            print("Call get_TreeWithAllGamma first...")
+            print("Call get_tree_with_all_gamma first...")
         ###QF:
         print("getting psf")
         for i, EL_ in enumerate(self.photon_df.ELs.values):
@@ -526,7 +455,7 @@ class Pbh(object):
                                             3) fill self.photon_df.burst_sizes
         """
         assert hasattr(self,
-                       'photon_df'), "photon_df doesn't exist, read data first (read_photon_list or get_TreeWithAllGamma)"
+                       'photon_df'), "photon_df doesn't exist, read data first (read_photon_list or get_tree_with_all_gamma)"
         if len(self._burst_dict) != 0:
             print("You started a burst search while there are already things in _burst_dict, now make it empty")
             self._burst_dict = {}
@@ -942,7 +871,7 @@ class Pbh(object):
         # The expected # of gammas
         if not hasattr(self, 'EA'):
             print("self.EA doesn't exist, reading it now")
-            self.getRunSummary()
+            self.get_run_summary()
         # 2D array, energy and (dN/dE * EA)
         number_expected = np.zeros((self.EA.shape[0], 2))
         count = 0
@@ -1010,7 +939,7 @@ class Pbh(object):
     def get_significance(self, verbose=False):
         residual_dict = self.residual_dict
         significance = 0
-        for b_, excess_ in residual_dict.iteritems():
+        for b_, excess_ in residual_dict.items():
             err_excess_ = np.sqrt(self.sig_burst_hist[b_] + pow(np.sqrt(10 * self.bkg_burst_hists[b_]) / 10, 2))
             if verbose:
                 print("Significance for bin %d has significance %.2f" % (b_, excess_ / err_excess_))
@@ -1184,6 +1113,8 @@ class Pbh(object):
             for key_ in all_bkg_burst_sizes:
                 key_ = float(key_)
                 bkg_err[key_] = np.std(np.array([d[key_] for d in self.bkg_burst_hists if key_ in d]))
+        else:
+            raise Exception("Unknown error type {0:s}".format(error))
 
         ax1.errorbar(self.sig_burst_hist.keys()[1:], self.sig_burst_hist.values()[1:], xerr=0.5,
                      yerr=sig_err[1:], fmt='bs', capthick=0,
@@ -1289,7 +1220,7 @@ class Pbh_combined(Pbh):
         self.delta_ll_cut = 6.63
         self.photon_df = None
         self.pbhs = []
-        self.runNums = []
+        self.run_numbers = []
         self.sig_burst_hist = {}
         self.avg_bkg_hist = {}
         self.residual_dict = {}
@@ -1359,7 +1290,7 @@ class Pbh_combined(Pbh):
                                                                           verbose=self.verbose)
                 self.do_step2345(pbh_)
 
-        rho_dot_ULs = self.get_ULs()
+        rho_dot_ULs = self.get_upper_limits()
         return rho_dot_ULs
 
     def add_pbh(self, pbh):
@@ -1375,8 +1306,8 @@ class Pbh_combined(Pbh):
         self.n_runs += 1
         self.do_step2345(pbh)
         # in the combiner class this is the latest run Num
-        self.runNum = pbh.runNum
-        self.runNums.append(pbh.runNum)
+        self.run_number = pbh.run_number
+        self.run_numbers.append(pbh.run_number)
 
     def do_step2345(self, pbh):
         # 2.
@@ -1451,19 +1382,18 @@ class Pbh_combined(Pbh):
         all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
         return all_burst_sizes
 
-    def add_run(self, runNum):
+    def add_run(self, run_number):
         pbh_ = Pbh()
-        pbh_.readEDfile(runNum=runNum)
-        pbh_.get_TreeWithAllGamma(runNum=runNum, nlines=None)
+        pbh_.get_tree_with_all_gamma(run_number=run_number)
         _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
         _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                   rando_method=self.rando_method,
                                                                   method=self.bkg_method, copy=True,
                                                                   n_scramble=self.N_scramble,
                                                                   return_burst_dict=True, verbose=self.verbose)
-        pbh_.getRunSummary()
+        pbh_.get_run_summary()
         self.add_pbh(pbh_)
-        # self.runNums.append(runNum)
+        # self.run_numbers.append(run_number)
 
     def n_excess(self, rho_dot, Veff, verbose=False):
         # eq 8.8, or maybe more appropriately call it n_expected
@@ -1547,7 +1477,7 @@ class Pbh_combined(Pbh):
             return rho_dot_min_ll_, min_ll_, rho_dots, lls_
         return rho_dot_min_ll_, min_ll_
 
-    def get_ULs(self, burst_size_threshold=2, rho_dots=None, upper_burst_size=None):
+    def get_upper_limits(self, burst_size_threshold=2, rho_dots=None, upper_burst_size=None):
         print("Getting UL for burst size above %d..." % burst_size_threshold)
         if rho_dots is None:
             rho_dots = self.rho_dots
@@ -1590,7 +1520,7 @@ class Pbh_combined(Pbh):
 
     def process_run_list(self, filename="pbh_runlist.txt"):
         runlist = pd.read_csv(filename, header=None)
-        runlist.columns = ["runNum"]
+        runlist.columns = ["run_number"]
         self.runlist = runlist.runNum.values
         self.bad_runs = []
         for run_ in self.runlist:
@@ -1602,8 +1532,7 @@ class Pbh_combined(Pbh):
                 # raise
                 self.bad_runs.append(run_)
                 self.runlist = self.runlist[np.where(self.runlist != run_)]
-        rho_dot_ULs = self.get_ULs()
-        return rho_dot_ULs
+        return self.get_upper_limits()
 
     def save(self, filename):
         # save_hdf5(self, filename)

@@ -16,7 +16,7 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
     # script_dir = '/raid/reedbuck/qfeng/pbh/'
 
     runlist_df = pd.read_csv(filename, header=None)
-    runlist_df.columns = ["runNum"]
+    runlist_df.columns = ["run_number"]
     runlist = runlist_df.runNum.values
     if hostname is None:
         hostname = socket.gethostname()
@@ -87,7 +87,7 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
     # script_dir = '/raid/reedbuck/qfeng/pbh/'
 
     runlist_df = pd.read_csv(filename, header=None)
-    runlist_df.columns = ["runNum"]
+    runlist_df.columns = ["run_number"]
     runlist = runlist_df.runNum.values
     if hostname is None:
         hostname = socket.gethostname()
@@ -169,7 +169,7 @@ def qsub_tehanu_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, 
     # script_dir = '/raid/reedbuck/qfeng/pbh/'
 
     runlist_df = pd.read_csv(filename, header=None)
-    runlist_df.columns = ["runNum"]
+    runlist_df.columns = ["run_number"]
     runlist = runlist_df.runNum.values
     if hostname is None:
         hostname = socket.gethostname()

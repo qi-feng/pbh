@@ -115,7 +115,7 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2, 11), runNum=5
                                       bkg_bins=100, ylog=True):
     fov = 1.75
     pbh = Pbh()
-    pbh.get_TreeWithAllGamma(runNum=runNum, nlines=None)
+    pbh.get_tree_with_all_gamma(run_number=runNum, nlines=None)
 
     # if Nsim >= pbh.photon_df.shape[0] - 1:
     #    print("Only {} events, doing {} sims instead of {}...".format(pbh.photon_df.shape[0], pbh.photon_df.shape[0] - 1, Nsim))
@@ -179,7 +179,7 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2, 11), runNum=5
 def test_burst_finding(window_size=3, runNum=55480, nlines=None, N_scramble=3, plt_log=True, verbose=False,
                        save_hist="test_burst_finding_histo", bkg_method="scramble", rando_method="avg"):
     pbh = Pbh()
-    pbh.get_TreeWithAllGamma(runNum=runNum, nlines=nlines)
+    pbh.get_tree_with_all_gamma(run_number=runNum, nlines=nlines)
     # do a small list
     # pbh.photon_df = pbh.photon_df[:nlines]
     sig_burst_hist, sig_burst_dict = pbh.sig_burst_search(window_size=window_size, verbose=verbose)
@@ -214,7 +214,7 @@ def test_ll(window_sizes=[1, 2, 5, 10], colors=['k', 'r', 'b', 'magenta'], runNu
             rho_dots=np.arange(0., 5.e5, 100), save_hist="test_ll", bkg_method="scramble", rando_method="avg",
             burst_size=2, xlog=True, grid=True):
     pbh = Pbh()
-    pbh.get_TreeWithAllGamma(runNum=runNum, nlines=None)
+    pbh.get_tree_with_all_gamma(run_number=runNum, nlines=None)
 
     for ii, window_size in enumerate(window_sizes):
         sig_burst_hist, sig_burst_dict = pbh.sig_burst_search(window_size=window_size, verbose=verbose)
@@ -295,6 +295,6 @@ def test_singlet_remover(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
 
 def test2():
     pbh = Pbh()
-    pbh.get_TreeWithAllGamma(runNum=55480, nlines=1000)
+    pbh.get_tree_with_all_gamma(run_number=55480, nlines=1000)
     print(pbh.photon_df.head())
     return pbh

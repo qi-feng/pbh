@@ -54,7 +54,7 @@ def sim_psf_likelihood_scramble_data(Nsim=1000, N_burst=3,
     # EL = 75, fov_center = np.array([180., 30.0])
     fov = 1.75
     pbh = Pbh()
-    pbh.get_TreeWithAllGamma(runNum=runNum, nlines=None)
+    pbh.get_tree_with_all_gamma(run_number=runNum, nlines=None)
 
     if Nsim >= pbh.photon_df.shape[0] - 1:
         print(

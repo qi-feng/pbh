@@ -14,13 +14,13 @@ def filter_good_runlist(infile="batch_all_v3/runlist_Final.txt", outfile="goodru
     no_ea = []
     for run in df_run.values.flatten():
         p_ = Pbh()
-        p_.readEDfile(run)
-        all_gamma_treeName = "run_" + str(run) + "/stereo/TreeWithAllGamma"
-        all_gamma_tree = p_.Rfile.Get(all_gamma_treeName)
+        p_.read_ed_file(run)
+        all_gamma_tree_name = "run_" + str(run) + "/stereo/TreeWithAllGamma"
+        all_gamma_tree = p_.root_file.Get(all_gamma_tree_name)
         es_ = []
 
         ea_Name = "run_" + str(run) + "/stereo/EffectiveAreas/gMeanEffectiveArea"
-        ea = p_.Rfile.Get(ea_Name);
+        ea = p_.root_file.Get(ea_Name)
         try:
             ea.GetN()
         except:

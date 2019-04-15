@@ -107,7 +107,7 @@ def comp_pbhs(pbhs1, pbhs2):
         print("Same window_size")
     else:
         print("*** Different window_size! ***")
-    if pbhs1.get_ULs() == pbhs2.get_ULs():
+    if pbhs1.get_upper_limits() == pbhs2.get_upper_limits():
         print("Same UL for burst size threshold 2")
     else:
         print("*** Different ULs for burst size threshold 2! ***")

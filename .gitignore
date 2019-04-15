@@ -1,0 +1,6 @@
+# test files for development and verification
+TestFiles/
+
+# pycharm files
+__pycache__/
+burst/__pycache__/
