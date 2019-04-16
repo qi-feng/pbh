@@ -2,10 +2,13 @@
 TestFiles/
 Plots/
 
+# ipynb work (testing etc)
+.ipynb_checkpoints/
+Untitled*.ipynb
+
 # pycharm files
 __pycache__/
 burst/__pycache__/
-
 
 #build folders
 burstcalc.egg-info/

@@ -66,7 +66,7 @@ def sim_psf_likelihood_scramble_data(Nsim=1000, N_burst=3,
     ll_sig_all = np.zeros(Nsim)
 
     for j in range(Nsim):
-        pbh.scramble()
+        pbh.scramble_times()
 
         #
         # this_slice = pbh.photon_df.iloc[j*N_burst:(j+1)*N_burst]

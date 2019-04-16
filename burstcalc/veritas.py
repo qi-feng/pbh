@@ -57,7 +57,7 @@ class VeritasFile(object):
 
         # pandas df columns
         # MJDs = MJD day (int)
-        # ts = time of day [ns]
+        # ts = time of day [s]
         # RAs = RA [deg]
         # DECs = Dec [deg]
         # Es = energy [TeV]
@@ -213,7 +213,7 @@ class VeritasFile(object):
                                event.S.fDirectionYCamPlane_Deg ** 2)
 
             # this is the time of day in ns
-            self.all_times[i] = event.S.fTime.getDayNS()
+            self.all_times[i] = event.S.fTime.getDayNS() / 1.e9 # to seconds
 
             if self.cuts == "soft":
                 is_gamma = ((event.S.fMSW > self.MSW_lower) and (event.S.fMSW < self.MSW_upper) and
@@ -232,7 +232,7 @@ class VeritasFile(object):
                 self.N_gamma_events += 1
                 # fill the pandas dataframe
                 self.df_.MJDs[i] = event.S.fTime.getMJDInt()
-                self.df_.ts[i] = event.S.fTime.getDayNS()
+                self.df_.ts[i] = self.all_times[i]
                 self.df_.RAs[i] = np.rad2deg(event.S.fDirectionRA_J2000_Rad)
                 self.df_.Decs[i] = np.rad2deg(event.S.fDirectionDec_J2000_Rad)
                 self.df_.Es[i] = event.S.fEnergy_GeV / 1000. # to TeV

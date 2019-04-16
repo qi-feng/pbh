@@ -6,6 +6,8 @@ from math import factorial
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 import pandas as pd
 
 from scipy.optimize import minimize
@@ -83,7 +85,7 @@ class BurstFile(VeritasFile):
         #   1 to 50 TeV
         self.psf_lookup[3, :] = np.array([0.031, 0.028, 0.027])
 
-        self._burst_dict = {}  # {"Burst #": [event # in this burst]}, for internal use
+        self.temp_burst_dict = {}  # {"Burst #": [event # in this burst]}, for internal use
 
         # used in plotting paramerters
         self.plotting_colors = (["b", "r", "k", "g"])
@@ -95,6 +97,19 @@ class BurstFile(VeritasFile):
         :return:
         '''
         fig, ax = plt.subplots(2, 2)
+
+        X, Y = np.meshgrid(self.energy_grid_tev, self.elevation_grid_deg)
+        im1 = ax[0][0].pcolor(X, Y, self.psf_lookup.T)
+        ax[0][0].set_xscale('log')
+        ax[0][0].set_xlabel('Energy [TeV]')
+        ax[0][0].set_ylabel('Elevation [deg]')
+
+        divider = make_axes_locatable(ax[0][0])
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im1, cax=cax, orientation='vertical')
+
+        #TODO: when interpolation is added properly plot that as well here in ax[1][0]
+
         e_means = (self.energy_grid_tev[:-1] + self.energy_grid_tev[1:]) / 2.
         el_means = (self.elevation_grid_deg[:-1] + self.elevation_grid_deg[1:]) / 2.
         self.logger.debug(e_means)
@@ -104,12 +119,18 @@ class BurstFile(VeritasFile):
             self.logger.debug(el_means)
             self.logger.debug(self.psf_lookup[i, :])
             ax[0][1].plot(el_means, self.psf_lookup[i, :], label=label, marker="+", ls="--")
+        ax[0][1].set_xlabel('Elevation [deg]')
+        ax[0][1].set_ylabel('PSF [deg]')
 
         self.logger.debug(el_means)
         for i, e in enumerate(el_means):
             label = "{0:.2f}$^\circ$".format(e)
             ax[1][1].plot(e_means, self.psf_lookup[:,i], label=label, marker="+", ls="--")
+        ax[1][1].set_xscale('log')
+        ax[1][1].set_xlabel('Energy [TeV]')
+        ax[1][1].set_ylabel('PSF [deg]')
 
+        plt.tight_layout()
         fig.savefig("Plots/PSF.pdf")
 
     def read_photon_list(self, ts, right_ascensions, declinations, energies, elevations):
@@ -137,6 +158,7 @@ class BurstFile(VeritasFile):
         # clean events that did not pass cut:
         self.photon_df = df_[df_.fail_cut == 0]
 
+        # determine the psf for each photon
         self.get_psf_lists()
 
     def get_tree_with_all_gamma(self):
@@ -162,10 +184,13 @@ class BurstFile(VeritasFile):
 
         # clean events that did not pass cut:
         self.photon_df = self.df_[self.df_.fail_cut == 0].copy()
+        self.logger.debug("Loaded photon list")
+        self.logger.debug(self.photon_df)
 
         # reindexing
         # self.photon_df.index = range(self.photon_df.shape[0])
 
+        # determine the psf for each photon
         self.get_psf_lists()
 
     def get_run_summary(self):
@@ -174,51 +199,69 @@ class BurstFile(VeritasFile):
 
         self.load_irfs()
 
-    def scramble(self, copy=True, all_events=True):
+    def scramble_times(self, copy=True, all_events=True):
+        '''
+        Estimate the background by scrambling the original event times.
+        :param copy: backup data before scrambling?
+        :param all_events: shuffle times prior to gamma/hadron cuts or
+        '''
         if not hasattr(self, 'photon_df'):
             raise Exception("Call get_tree_with_all_gamma first...")
-        if copy:
-            # if you want to keep the original burst_dict, this should only happen at the 1st scramble
-            if not hasattr(self, 'photon_df_orig'):
-                self.photon_df_orig = self.photon_df.copy()
+
+        # copy the df if not already copied
+        if copy and not hasattr(self, 'photon_df_orig'):
+            # if you want to keep the original burst_dict, this should only happen at the 1st scramble_times
+            self.logger.debug("Saving original photon df")
+            self.photon_df_orig = self.photon_df.copy()
+
+        # shuffle the events, either using the times of all the events or the times for the post cut events
         if all_events:
-            # shuffle among the arrival time of all events
+            self.logger.debug("Shuffle among the arrival time of all events")
+            # TODO: this will have wider time spread than just selecting the first X events times need to fix this
             random.shuffle(self.all_times)
             ts_ = self.all_times[:self.N_gamma_events]
         else:
+            self.logger.debug("Shuffle among the arrival time of gamma events")
             ts_ = self.photon_df.ts.values
             random.shuffle(ts_)
+
+        # update times with shuffled times
+        self.logger.debug("Shuffled = {0:d}, original = {1:d}, num gamma = {2:d}".format(len(ts_),
+                                                                                         len(self.photon_df['ts']),
+                                                                                         self.N_gamma_events))
         self.photon_df.at[:, 'ts'] = ts_
-        # re-init _burst_dict for counting
-        self._burst_dict = {}
-        # print self.photon_df.head()
-        # print self.photon_df.ts.shape, self.photon_df.ts
-        # sort!
+
+        # re-init temp_burst_dict for counting
+        self.temp_burst_dict = {}
+
+        # sort by new times
+        self.logger.debug("Sorting events based upon their new time stamps")
         if pd.__version__ > '0.18':
             self.photon_df = self.photon_df.sort_values('ts')
         else:
             self.photon_df = self.photon_df.sort('ts')
-        return ts_
 
-    def t_rando(self, copy=True, rate="avg", all_events=True):
-        """
-        throw Poisson distr. ts based on the original ts,
-        use 1/delta_t as the expected Poisson rate for each event
-        """
+    def random_times(self, copy=True, rate="avg", all_events=True):
+        '''
+        Estimate the background using random times calculated using a poisson dist.
+        :param copy: backup data before scrambling?
+        :param rate: method for calculating the background times
+        :param all_events: use all events or only those passing gamma/hadron cuts
+        '''
         if not hasattr(self, 'photon_df'):
-            print("Call get_tree_with_all_gamma first...")
+            raise Exception("Call get_tree_with_all_gamma first...")
 
-        # if you want to keep the original burst_dict, this should only happen at the 1st scramble
+        # if you want to keep the original burst_dict, this should only happen at the 1st scramble_times
         if copy and (not hasattr(self, 'photon_df_orig')):
+            self.logger.debug("Saving original photon df")
             self.photon_df_orig = self.photon_df.copy()
 
-        # at the oment this is only defined for rate == "cell" yet the default is "avg"
+        # at the moment this is only defined for rate == "cell" yet the default is "avg"
         if rate == "cell":
             delta_ts = np.diff(self.photon_df.ts)
         else:
-            raise Exception("rate not define for type {0:s}".format(rate))
+            raise Exception("Rate not define for type {0:s}".format(rate))
 
-        # for i, _delta_t in enumerate(delta_ts):
         if all_events:
             N = self.N_all_events
             self.rando_all_times = np.zeros(N)
@@ -260,9 +303,8 @@ class BurstFile(VeritasFile):
             for i, in range(self.photon_df.shape[0]):
                 self.photon_df.at[i, 'ts'] = self.rando_all_times[i]
         # naturally sorted
-        # re-init _burst_dict for counting
-        self._burst_dict = {}
-        return self.photon_df.ts
+        # re-init temp_burst_dict for counting
+        self.temp_burst_dict = {}
 
     # @autojit
     def psf_func(self, theta2, psf_width, N=100):
@@ -293,7 +335,7 @@ class BurstFile(VeritasFile):
         '''
         energy_bin = np.digitize(E, self.energy_grid_tev, right=True) - 1
         elevation_bin = np.digitize(EL, self.elevation_grid_deg, right=True) - 1
-        self.logger.debug("Energy bin = {0:d}, elevation bin = {1:d}".format(energy_bin, elevation_bin))
+        # self.logger.debug("Energy bin = {0:d}, elevation bin = {1:d}".format(energy_bin, elevation_bin))
         # TODO: add interpolation here - it must be better!!
         return self.psf_lookup[energy_bin, elevation_bin]
 
@@ -304,15 +346,11 @@ class BurstFile(VeritasFile):
         '''
         if not hasattr(self, 'photon_df'):
             raise Exception("Call get_tree_with_all_gamma first...")
-        self.logger.debug("Getting psf information of event")
 
-        # TODO: this cam be made a lot more pythonic and probably sped up
-        # itterator??
-        # surely we can just pass arrays around and use numpy
-        for i, (EL_, E_) in enumerate(zip(self.photon_df.ELs.values, self.photon_df.Es.values)):
-            self.logger.debug("Photon {0:d} El = {1:0.1f}, En = {2:0.2f}".format(i, EL_, E_))
-            self.photon_df.at[i, 'psfs'] = self.get_psf(E=E_, EL=EL_)
-            self.logger.debug("PSF = {0:.2f}".format(self.photon_df.at[i, 'psfs']))
+        # calculate psfs for gamma like events
+        self.photon_df.psfs = self.get_psf(E=self.photon_df.Es.values, EL=self.photon_df.ELs.values)
+        self.logger.debug("Calculated PSFs")
+        self.logger.debug(self.photon_df)
 
     # @autojit
     def get_angular_distance(self, coord1, coord2):
@@ -439,7 +477,7 @@ class BurstFile(VeritasFile):
 
     def search_angular_window(self, coords, psfs, slice_index):
         # Determine if N_evt = coords.shape[0] events are accepted to come from one direction
-        # slice_index is the numpy array slice of the input event numbers, used for _burst_dict
+        # slice_index is the numpy array slice of the input event numbers, used for temp_burst_dict
         # return: A) centroid, likelihood, and a list of event numbers associated with this burst,
         #            given that a burst is found, or the input has only one event
         #         B) centroid, likelihood, a list of event numbers excluding the outlier, the outlier event number
@@ -489,22 +527,27 @@ class BurstFile(VeritasFile):
     def search_time_window(self, window_size=1):
         """
         Start a burst search for the given window_size in photon_df
-        _burst_dict needs to be clean for a new scramble
+        temp_burst_dict needs to be clean for a new scramble_times
         :param window_size: in the unit of second
-        :return: burst_hist, in the process 1) fill self._burst_dict, and
+        :return: burst_hist, in the process 1) fill self.temp_burst_dict, and
                                             2) fill self.photon_df.burst_sizes through burst counting; and
                                             3) fill self.photon_df.burst_sizes
         """
-        assert hasattr(self,
-                       'photon_df'), "photon_df doesn't exist, read data first (read_photon_list or get_tree_with_all_gamma)"
-        if len(self._burst_dict) != 0:
+        assert hasattr(self, 'photon_df'), \
+            "photon_df doesn't exist, read data first (read_photon_list or get_tree_with_all_gamma)"
+
+        # check status of burst dictionary
+        if len(self.temp_burst_dict) != 0:
             self.logger.info(
-                "You started a burst search while there are already things in _burst_dict, now make it empty")
-            self._burst_dict = {}
+                "You started a burst search while there are already things in temp_burst_dict, now make it empty")
+            self.temp_burst_dict = {}
+
+
         previous_window_start = -1.0
         previous_window_end = -1.0
         previous_singlets = np.array([])
         previous_non_singlets = np.array([])
+
         # Master event loop:
         for t in self.photon_df.ts:
             self.logger.debug("Starting at the event at %.5f" % t)
@@ -592,44 +635,48 @@ class BurstFile(VeritasFile):
                     else:
                         # more than 1 outliers to process,
                         # update outlier_of_outlier_events and repeat the while loop
-                        outlier_burst_events, outlier_of_outlier_events = self.search_event_slice(
-                            outlier_of_outlier_events)
-        # the end of master event loop, self._burst_dict is filled
+                        outlier_burst_events, outlier_of_outlier_events = self.search_event_slice(outlier_of_outlier_events)
+
+        # the end of master event loop, self.temp_burst_dict is filled
         # now count bursts and fill self.photon_df.burst_sizes:
         self.logger.debug("Counting bursts")
-        # _burst_dict = self._burst_dict.copy()
+        # temp_burst_dict = self.temp_burst_dict.copy()
         self.duplicate_burst_dict()
         # initialize burst sizes
         self.photon_df.at[:, 'burst_sizes'] = 1
 
-        # Note now self._burst_dict will be cleared!!
+        # Note now self.temp_burst_dict will be cleared!!
         self.burst_counting()
         burst_hist = self.get_burst_hist()
         self.logger.debug("Found bursts: %s" % burst_hist)
-        # return self.photon_df.burst_sizes
+
         return burst_hist, self.burst_dict
 
-    # @autojit
     def singlet_remover(self, slice_index):
-        """
+        '''
+        Identify and remove any singlet events
         :param slice_index: a np array of events' indices in photon_df
         :return: new slice_index with singlets (no neighbors in a radius of 5*psf) removed, and a slice of singlets;
                  return None and input slice if all events are singlets
-        """
+        '''
         if slice_index.shape[0] == 1:
             # one event, singlet by definition:
             # return Nones
             # self.photon_df.at[slice_index[0], 'burst_sizes'] = 1
             return None, slice_index
+
         N_ = self.photon_df.shape[0]
+
         slice_tuple = tuple(slice_index[:, np.newaxis].T)
-        coord_slice = \
-            np.concatenate([self.photon_df.RAs.values.reshape(N_, 1), self.photon_df.Decs.values.reshape(N_, 1)],
-                           axis=1)[
-                slice_tuple]
+
+        coord_slice = np.concatenate([self.photon_df.RAs.values.reshape(N_, 1),
+                                      self.photon_df.Decs.values.reshape(N_, 1)], axis=1)[slice_tuple]
+
         psf_slice = self.photon_df.psfs.values[slice_tuple]
+
         # default all events are singlet
         mask_ = np.zeros(slice_index.shape[0], dtype=bool)
+
         # use a dict of {event_num:neighbor_found} to avoid redundancy
         none_singlet_dict = {}
         for i in range(slice_index.shape[0]):
@@ -638,11 +685,12 @@ class BurstFile(VeritasFile):
                 continue
             else:
                 psf_5 = psf_slice[i] * 5.0
-                for j in range(slice_index.shape[0]):
-                    if j == i:
-                        # self
-                        continue
-                    elif self.get_angular_distance(coord_slice[i], coord_slice[j]) < psf_5:
+
+                # no need to test (i,j) and (j,i)
+                for j in range(i + 1, slice_index.shape[0]):
+                    self.logger.debug("({0:d}, {1:d}) = {2:f}".format(i, j, self.get_angular_distance(coord_slice[i],
+                                                                                                      coord_slice[j])))
+                    if self.get_angular_distance(coord_slice[i], coord_slice[j]) < psf_5:
                         # decide this pair isn't singlet
                         none_singlet_dict[slice_index[i]] = slice_index[j]
                         none_singlet_dict[slice_index[j]] = slice_index[j]
@@ -650,16 +698,16 @@ class BurstFile(VeritasFile):
                         mask_[j] = True
                         continue
         ###QF
-        self.logger.debug(
-            "removed {0:d} singlet, {1:d} good events".format(sum(mask_ == False), slice_index[mask_].shape[0]))
+        self.logger.debug("Removed {0:d} singlet, {1:d} good events".format(sum(mask_ == False),
+                                                                            slice_index[mask_].shape[0]))
         return slice_index[mask_], slice_index[np.invert(mask_)]
 
     def search_event_slice(self, slice_index):
         """
-        _burst_dict needs to be clean before starting a new scramble
+        temp_burst_dict needs to be clean before starting a new scramble_times
         :param slice_index: np array of indices of the events in photon_df that the burst search is carried out upon
         :return: np array of indices of events that are in a burst, indices of outliers (None if no outliers);
-                 in the process fill self._burst_dict for later burst counting
+                 in the process fill self.temp_burst_dict for later burst counting
         """
         N_ = self.photon_df.shape[0]
         ###QF
@@ -695,7 +743,7 @@ class BurstFile(VeritasFile):
         if len(ang_search_res) == 3:
             # All events with slice_index form 1 burst
             centroid, ll_centroid, burst_events = ang_search_res
-            self._burst_dict[len(self._burst_dict) + 1] = burst_events
+            self.temp_burst_dict[len(self.temp_burst_dict) + 1] = burst_events
             # count later
             # self.photon_df.burst_sizes[slice_index] = len(burst_events)
             # burst_events should be the same as slice_index
@@ -729,82 +777,86 @@ class BurstFile(VeritasFile):
                 return burst_events, np.array(outlier_evts)
             else:
                 # A burst with a subset of events of slice_index is found
-                self._burst_dict[len(self._burst_dict) + 1] = burst_events
+                self.temp_burst_dict[len(self.temp_burst_dict) + 1] = burst_events
                 # self.photon_df.burst_sizes[tuple(burst_events)] = len(burst_events)
                 return burst_events, np.array(outlier_evts)
 
     def duplicate_burst_dict(self):
         # if you want to keep the original burst_dict
-        self.burst_dict = self._burst_dict.copy()
+        self.burst_dict = self.temp_burst_dict.copy()
         return self.burst_dict
 
     # @autojit
     def burst_counting_recur(self):
         """
-        :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
+        :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
         """
-        # Only to be called after self._burst_dict is filled
+        # Only to be called after self.temp_burst_dict is filled
         # Find the largest burst
-        largest_burst_number = max(self._burst_dict, key=lambda x: len(set(self._burst_dict[x])))
-        for evt in self._burst_dict[largest_burst_number]:
+        largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
+        for evt in self.temp_burst_dict[largest_burst_number]:
             # Assign burst size to all events in the largest burst
-            self.photon_df.at[evt, 'burst_sizes'] = self._burst_dict[largest_burst_number].shape[0]
-            # self.photon_df.burst_sizes[evt] = len(self._burst_dict[largest_burst_number])
-            for key in self._burst_dict.keys():
+            self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
+            # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
+            for key in self.temp_burst_dict.keys():
                 # Now delete the assigned events in all other candiate bursts to avoid double counting
-                if evt in self._burst_dict[key] and key != largest_burst_number:
-                    # self._burst_dict[key].remove(evt)
-                    self._burst_dict[key] = np.delete(self._burst_dict[key], np.where(self._burst_dict[key] == evt))
+                if evt in self.temp_burst_dict[key] and key != largest_burst_number:
+                    # self.temp_burst_dict[key].remove(evt)
+                    self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
         # Delete the largest burst, which is processed above
-        self._burst_dict.pop(largest_burst_number, None)
-        # repeat while there are unprocessed bursts in _burst_dict
-        if len(self._burst_dict) >= 1:
+        self.temp_burst_dict.pop(largest_burst_number, None)
+        # repeat while there are unprocessed bursts in temp_burst_dict
+        if len(self.temp_burst_dict) >= 1:
             self.burst_counting_recur()
 
     def burst_counting(self):
         """
-        :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
+        :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
         """
-        # Only to be called after self._burst_dict is filled
-        while len(self._burst_dict) >= 1:
+        # Only to be called after self.temp_burst_dict is filled
+        while len(self.temp_burst_dict) >= 1:
             # Find the largest burst
-            largest_burst_number = max(self._burst_dict, key=lambda x: len(set(self._burst_dict[x])))
-            for evt in self._burst_dict[largest_burst_number]:
+            largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
+            for evt in self.temp_burst_dict[largest_burst_number]:
                 # Assign burst size to all events in the largest burst
-                self.photon_df.at[evt, 'burst_sizes'] = self._burst_dict[largest_burst_number].shape[0]
-                # self.photon_df.burst_sizes[evt] = len(self._burst_dict[largest_burst_number])
-                for key in self._burst_dict.keys():
+                self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
+                # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
+                for key in self.temp_burst_dict.keys():
                     # Now delete the assigned events in all other candiate bursts to avoid double counting
-                    if evt in self._burst_dict[key] and key != largest_burst_number:
-                        # self._burst_dict[key].remove(evt)
-                        self._burst_dict[key] = np.delete(self._burst_dict[key], np.where(self._burst_dict[key] == evt))
+                    if evt in self.temp_burst_dict[key] and key != largest_burst_number:
+                        # self.temp_burst_dict[key].remove(evt)
+                        self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
             # Delete the largest burst, which is processed above
-            self._burst_dict.pop(largest_burst_number, None)
-            # repeat while there are unprocessed bursts in _burst_dict
-            # if len(self._burst_dict) >= 1:
+            self.temp_burst_dict.pop(largest_burst_number, None)
+            # repeat while there are unprocessed bursts in temp_burst_dict
+            # if len(self.temp_burst_dict) >= 1:
             #    self.burst_counting()
 
     def burst_counting_fractional(self):
         """
-        :return: nothing but fills self.photon_df.burst_sizes, during the process self._burst_dict is emptied!
+        :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
         """
-        # Only to be called after self._burst_dict is filled
-        while len(self._burst_dict) >= 1:
+        # Only to be called after self.temp_burst_dict is filled
+        while len(self.temp_burst_dict) >= 1:
             # Find the largest burst
-            largest_burst_number = max(self._burst_dict, key=lambda x: len(set(self._burst_dict[x])))
-            for evt in self._burst_dict[largest_burst_number]:
+            largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
+            for evt in self.temp_burst_dict[largest_burst_number]:
                 # Assign burst size to all events in the largest burst
-                self.photon_df.at[evt, 'burst_sizes'] = self._burst_dict[largest_burst_number].shape[0]
-                # self.photon_df.burst_sizes[evt] = len(self._burst_dict[largest_burst_number])
-                for key in self._burst_dict.keys():
+                self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
+                # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
+                for key in self.temp_burst_dict.keys():
                     # Now delete the assigned events in all other candiate bursts to avoid double counting
-                    if evt in self._burst_dict[key] and key != largest_burst_number:
-                        # self._burst_dict[key].remove(evt)
-                        self._burst_dict[key] = np.delete(self._burst_dict[key], np.where(self._burst_dict[key] == evt))
+                    if evt in self.temp_burst_dict[key] and key != largest_burst_number:
+                        # self.temp_burst_dict[key].remove(evt)
+                        self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
             # Delete the largest burst, which is processed above
-            self._burst_dict.pop(largest_burst_number, None)
+            self.temp_burst_dict.pop(largest_burst_number, None)
 
     def get_burst_hist(self):
+        '''
+        Produce dictionary of number of bursts of a given size
+        :return: burst_hist - dictionary {number of gamma in burst: number of times}
+        '''
         burst_hist = {}
         for i in np.unique(self.photon_df.burst_sizes.values):
             burst_hist[i] = np.sum(self.photon_df.burst_sizes.values == i) / i
@@ -813,36 +865,49 @@ class BurstFile(VeritasFile):
     def sig_burst_search(self, window_size=1):
         self.sig_burst_hist, self.sig_burst_dict = self.search_time_window(window_size=window_size)
 
-    def estimate_bkg_burst(self, window_size=1, method="scramble", copy=True, n_scramble=10, rando_method="avg",
-                           return_burst_dict=False, all=True):
-        """
-        :param method: either "scramble" or "rando"
+    def estimate_bkg_burst(self, window_size=1, method="scramble_times", copy=True, n_scramble=10, rando_method="avg",
+                           all=True):
+        '''
+
+        :param window_size: window size in s
+        :param method: either scramble_times or rando
+        :param copy:
+        :param n_scramble: number of times to sample the background data
+        :param rando_method:
+        :param all:
         :return:
-        """
+        '''
+        self.logger.debug("Using method {0:s}".format(method))
+
         # Note that from now on we are CHANGING the photon_df!
-
-        bkg_burst_hists = []
-        bkg_burst_dicts = []
-        for i in range(n_scramble):
-            # bkg_burst_hist = pbh.estimate_bkg_burst(window_size=window_size)
-            if method == "scramble":
-                self.scramble(copy=copy, all_events=all)
+        self.bkg_burst_hists = []
+        self.bkg_burst_dicts = []
+        for _ in range(n_scramble):
+            # scramble_times the data
+            if method == "scramble_times":
+                self.scramble_times(copy=copy, all_events=all)
             elif method == "rando":
-                self.t_rando(copy=copy, rate=rando_method)
+                self.random_times(copy=copy, rate=rando_method)
+            else:
+                 raise Exception("You have tried to use method {0:s} which is not a valid method".format(method))
+
+            # calculate the hist and dict for background bursts within time window
             bkg_burst_hist, bkg_burst_dict = self.search_time_window(window_size=window_size)
-            bkg_burst_hists.append(bkg_burst_hist.copy())
-            if return_burst_dict:
-                bkg_burst_dicts.append(bkg_burst_dict.copy())
 
-        self.bkg_burst_hists = bkg_burst_hists
+            self.logger.debug(bkg_burst_dict)
 
-        all_bkg_burst_sizes = set(k for dic in bkg_burst_hists for k in dic.keys())
+            # append to list
+            self.bkg_burst_hists.append(bkg_burst_hist.copy())
+            self.bkg_burst_dicts.append(bkg_burst_dict.copy())
+
+
+        all_bkg_burst_sizes = set(k for dic in self.bkg_burst_hists for k in dic.keys())
         # also a dict
         avg_bkg_hist = {}
         # avg_bkg_hist_count = {}
         for key_ in all_bkg_burst_sizes:
             key_ = int(key_)
-            for d_ in bkg_burst_hists:
+            for d_ in self.bkg_burst_hists:
                 if key_ in d_:
                     if key_ in avg_bkg_hist:
                         avg_bkg_hist[key_] += d_[key_]
@@ -856,10 +921,7 @@ class BurstFile(VeritasFile):
             avg_bkg_hist[k] /= n_scramble * 1.0
 
         self.avg_bkg_hist = avg_bkg_hist.copy()
-        # return bkg_burst_hists, avg_bkg_hist
-        if return_burst_dict:
-            return self.avg_bkg_hist, bkg_burst_dicts
-        return self.avg_bkg_hist
+
 
     def get_residual_hist(self):
         residual_dict = {}

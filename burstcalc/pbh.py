@@ -42,7 +42,7 @@ class Pbh_combined(Burst):
         # Make the class for a specific window size
         self.window_size = window_size
         # Some global parameters
-        self.bkg_method = "scramble"
+        self.bkg_method = "scramble_times"
         self.rando_method = "avg"
         self.N_scramble = 10
         self.verbose = False
@@ -77,7 +77,7 @@ class Pbh_combined(Burst):
                 for pbh_ in pbhs_.pbhs:
                     _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size,
                                                                              verbose=self.verbose)
-                    _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size,
+                    pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                               rando_method=self.rando_method,
                                                                               method=self.bkg_method, copy=True,
                                                                               n_scramble=self.N_scramble,
@@ -89,7 +89,7 @@ class Pbh_combined(Burst):
             for pbh_ in orig_pbhs:
                 _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size,
                                                                          verbose=self.verbose)
-                _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size,
+                pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                           rando_method=self.rando_method,
                                                                           method=self.bkg_method, copy=True,
                                                                           n_scramble=self.N_scramble,
@@ -193,11 +193,10 @@ class Pbh_combined(Burst):
         pbh_ = Pbh()
         pbh_.get_tree_with_all_gamma(run_number=run_number)
         _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
-        _avg_bkg_hist, _bkg_burst_dicts = pbh_.estimate_bkg_burst(window_size=self.window_size,
+        pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                   rando_method=self.rando_method,
                                                                   method=self.bkg_method, copy=True,
-                                                                  n_scramble=self.N_scramble,
-                                                                  return_burst_dict=True, verbose=self.verbose)
+                                                                  n_scramble=self.N_scramble)
         pbh_.get_run_summary()
         self.add_pbh(pbh_)
         # self.run_numbers.append(run_number)

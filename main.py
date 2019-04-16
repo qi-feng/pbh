@@ -6,7 +6,7 @@ from optparse import OptionParser
 from burstcalc.process import process_one_run
 
 
-def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
+def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble_times",
                      script_dir='/raid/reedbuck/qfeng/pbh/', overwrite=True, hostname=None, walltime=48):
     if window_size < 1:
         print('Submitting jobs for runlist %s with search window size %.1g' % (filename, window_size))
@@ -77,7 +77,7 @@ def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg
             raise
 
 
-def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
+def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble_times",
                       script_dir='/global/cscratch1/sd/qifeng/pbh/', overwrite=True, hostname=None, walltime=48):
     if window_size < 1:
         print('Submitting jobs for runlist %s with search window size %.1g' % (filename, window_size))
@@ -159,7 +159,7 @@ def qsub_cori_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bk
             raise
 
 
-def qsub_tehanu_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",
+def qsub_tehanu_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble_times",
                         script_dir='/a/data/tehanu/qifeng/pbh', overwrite=True, hostname=None, walltime=48):
     if window_size < 1:
         print('Submitting jobs for runlist %s with search window size %.1g' % (filename, window_size))
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     parser.add_option("-w", "--window", dest="window", type="float", default=10)
     # parser.add_option("-p","--plot",dest="plot",default=False)
     parser.add_option("-p", "--plot", action="store_true", dest="plot", default=False)
-    parser.add_option("-b", "--bkg_method", dest="bkg_method", default="scramble")
+    parser.add_option("-b", "--bkg_method", dest="bkg_method", default="scramble_times")
     parser.add_option("-m", "--makeup", action="store_false", dest="overwrite", default=True)
     parser.add_option("-t", "--walltime", dest="walltime", type="int", default=48)
     parser.add_option("-c", "--cori", action="store_true", dest="cori", default=False)
