@@ -1,7 +1,7 @@
 import numpy as np
 
-from burst.io import dump_pickle
-from burst.pbh import Pbh_combined
+from burstcalc.io import dump_pickle
+from burstcalc.pbh import Pbh_combined
 
 
 def process_one_run(run, window_size, rho_dots=np.arange(0., 3.e5, 100), plot=False, bkg_method="scramble"):

@@ -7,8 +7,6 @@ from astropy import units as u
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 try:
     import ROOT
 
@@ -17,8 +15,10 @@ except:
     raise Exception("Can't import ROOT, no related functionality possible")
 
 
-class VERITAS_file():
-    def __init__(self, run_number, data_dir, cuts="soft", using_ed=True, num_ev_to_read=None, debug = False):
+class VeritasFile(object):
+    def __init__(self, run_number, data_dir,  using_ed=True, num_ev_to_read=None, debug = False):
+        self.logger = logging.getLogger(__name__)
+
         if debug:
             logging.basicConfig(level=logging.DEBUG)
         else:
@@ -27,21 +27,21 @@ class VERITAS_file():
         self.run_number = int(run_number)
         self.data_dir = data_dir
 
-        logger.debug('Run Number = %d ', self.run_number)
-        logger.debug('Data Dir = %s ', self.data_dir)
+        self.logger.debug('Run Number = %d ', self.run_number)
+        self.logger.debug('Data Dir = %s ', self.data_dir)
 
         if using_ed:
-            logger.debug('Loading ED file')
+            self.logger.info('Loading ED file')
 
             self.using_ed = True
             self._read_ed_file()
         else:
-            logger.debug('Loading VEGAS file')
+            self.logger.info('Loading VEGAS file')
             self.using_ed = False
             self.__vegas_loaded = False
 
             if (not self.__vegas_loaded):
-                logger.debug('Load VEGAS lib')
+                self.logger.debug('Load VEGAS lib')
                 if ROOT.gSystem.Load("libVEGAScommon") not in [0, 1]:
                     raise Exception("Problem loading VEGAS Common libraries - please check this before proceeding")
                 if ROOT.gSystem.Load("libVEGASstage4") not in [0, 1]:
@@ -60,20 +60,28 @@ class VERITAS_file():
         # ts = time of day [ns]
         # RAs = RA [deg]
         # DECs = Dec [deg]
-        # Es = energy [GeV]
+        # Es = energy [TeV]
         # ELs = elevations [deg]
         # psfs - not filled here
         # burst_sizes - not filled here
         # fail_cut - not filled here
         self.columns = ['MJDs', 'ts', 'RAs', 'Decs', 'Es', 'ELs', 'psfs', 'burst_sizes', 'fail_cut']
 
-        # cuts
+        # number of events to read (for faster debugging)
+        self.num_ev_to_read = num_ev_to_read
+
+    def set_cuts(self, cuts="soft", energy_cut_low = 0.08*u.TeV, energy_cut_high = 50*u.TeV, elevation_cut_low = 50, distance_upper_cut = 1.45):
+        '''
+
+        :param cuts:
+        :return:
+        '''
         self.apply_cuts = True
         self.cuts = cuts
-        self.energy_low_cut = 100*u.GeV
-        self.energy_high_cut = 100*u.TeV
-        self.elevation_low_cut = 60
-        self.distance_upper_cut = 1.45
+        self.energy_low_cut = energy_cut_low
+        self.energy_high_cut = energy_cut_high
+        self.elevation_low_cut = elevation_cut_low
+        self.distance_upper_cut = distance_upper_cut
 
         if self.cuts == "soft":
             self.MSW_lower = 0.05
@@ -82,8 +90,8 @@ class VERITAS_file():
             self.MSL_upper = 1.3
             self.max_height_lower = 7
 
-        # number of events to read (for faster debugging)
-        self.num_ev_to_read = num_ev_to_read
+        self.cuts_set = True
+
 
     def _read_ed_file(self):
         '''
@@ -197,7 +205,7 @@ class VERITAS_file():
 
         # perform main loop to fill tree
         for i, event in enumerate(event_tree):
-            logger.debug(i)
+            self.logger.debug(i)
             if i >= self.N_all_events:
                 break
             # distance in deg from center of FoV
@@ -211,7 +219,7 @@ class VERITAS_file():
                 is_gamma = ((event.S.fMSW > self.MSW_lower) and (event.S.fMSW < self.MSW_upper) and
                             (event.S.fMSL > self.MSL_lower) and (event.S.fMSW < self.MSL_upper) and
                             (event.S.fShowerMaxHeight_KM > self.max_height_lower))
-                logger.debug("{0:0.2f} {1:0.2f} {2:0.2f} {3:s}".format(event.S.fMSW, event.S.fMSL, event.S.fShowerMaxHeight_KM, str(is_gamma)))
+                self.logger.debug("{0:0.2f} {1:0.2f} {2:0.2f} {3:s}".format(event.S.fMSW, event.S.fMSL, event.S.fShowerMaxHeight_KM, str(is_gamma)))
             else:
                 is_gamma = True
 
@@ -224,15 +232,21 @@ class VERITAS_file():
                 self.N_gamma_events += 1
                 # fill the pandas dataframe
                 self.df_.MJDs[i] = event.S.fTime.getMJDInt()
-                # df_.eventNumber[i] = event.eventNumber
                 self.df_.ts[i] = event.S.fTime.getDayNS()
                 self.df_.RAs[i] = np.rad2deg(event.S.fDirectionRA_J2000_Rad)
                 self.df_.Decs[i] = np.rad2deg(event.S.fDirectionDec_J2000_Rad)
-                self.df_.Es[i] = event.S.fEnergy_GeV
+                self.df_.Es[i] = event.S.fEnergy_GeV / 1000. # to TeV
                 self.df_.ELs[i] = event.S.fArrayTrackingElevation_Deg
 
 
     def load_gamma_tree(self):
+        '''
+        Lod gamma ray data from ED/VEGAS file
+        :return:
+        '''
+        if not self.cuts_set:
+            Exception("Cuts have not been set - this mudt be done before loading the gamma data")
+
         if self.using_ed:
             return self._load_gamma_tree_ed()
         else:
@@ -248,10 +262,9 @@ class VERITAS_file():
 
         tRunSummary = self.root_file.Get("total_1/stereo/tRunSummary")
         for tR in tRunSummary:
-            self.tOn = tR.tOn
-            # self.Rate = tR.Rate
-            # self.RateOff = tR.RateOff
+            self.run_duration = tR.tOn * u.s
             self.DeadTimeFracOn = tR.DeadTimeFracOn
+            self.run_live_time = self.run_live_time * (1. - self.DeadTimeFracOn)
             self.TargetRA = tR.TargetRA
             self.TargetDec = tR.TargetDec
             self.TargetRAJ2000 = tR.TargetRAJ2000
@@ -272,12 +285,8 @@ class VERITAS_file():
                 raise Exception(
                     "Run number in file ({0:d}) is not the same as run number of file ({1:d})".format(tR.faRunNumber,
                                                                                                       self.run_number))
-            self.tOn = tR.fOnCounts
-            # self.Rate = tR.Rate
-            # self.RateOff = tR.RateOff
-            # self.DeadTimeFracOn = tR.DeadTimeFracOn
-            self.run_duration = tR.faDuration
-            self.run_live_time = tR.faLiveTime
+            self.run_duration = tR.faDuration * u.s
+            self.run_live_time = tR.faLiveTime * u.s
             self.DeadTimeFracOn = 1. - self.run_live_time / self.run_duration
             self.TargetRA = tR.fSourceRADeg
             self.TargetDec = tR.fSourceDecDeg

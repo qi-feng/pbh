@@ -1,8 +1,8 @@
 from matplotlib import pyplot as plt
 import numpy as np
 
-from burst.tools import get_n_expected
-from burst.io import load_pickle
+from burstcalc.tools import get_n_expected
+from burstcalc.io import load_pickle
 
 try:
     import ROOT

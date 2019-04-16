@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from burst.sim import sim_psf_likelihood, sim_cut_90efficiency
-from burst.tools import fit_gaussian_hist
+from main.sim import sim_psf_likelihood, sim_cut_90efficiency
+from main.tools import fit_gaussian_hist
 
 
 def calc_cut_sig(ll_sig_all, ll_bkg_all, ll_cut, upper=True):

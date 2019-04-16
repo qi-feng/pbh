@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from burst.pbh import Pbh
-from burst.powerlaw import powerlaw
+from main.pbh import Pbh
+from main.powerlaw import powerlaw
 
 
 def sim_psf_likelihood(Nsim=1000, N_burst=3, filename=None,

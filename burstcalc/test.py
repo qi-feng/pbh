@@ -1,15 +1,15 @@
 from matplotlib import pyplot as plt
 import numpy as np
 
-from burst.pbh import Pbh
-from burst.powerlaw import powerlaw
-from burst.sim import sim_psf_likelihood_scramble_data, sim_psf_likelihood
-from burst.io import dump_pickle
+from burstcalc.burst import BurstFile
+from burstcalc.powerlaw import powerlaw
+from burstcalc.sim import sim_psf_likelihood_scramble_data, sim_psf_likelihood
+from burstcalc.io import dump_pickle
 
 
 def test_psf_func(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
     # Nburst: Burst size to visualize
-    pbh = Pbh()
+    pbh = BurstFile()
     fov_center = np.array([180., 30.0])
     fov = 1.75
 
@@ -50,7 +50,7 @@ def test_psf_func(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
 # def test_psf_func_sim(psf_width=0.05, prob="uniform", Nsim=10000, Nbins=40, filename=None, xlim=None):
 def test_psf_func_sim(psf_width=0.05, prob="psf", Nsim=10000, Nbins=40, filename=None, xlim=(0, 0.5)):
     # def test_psf_func_sim(psf_width=0.05, prob="psf", Nsim=10000, Nbins=40, filename=None, xlim=None):
-    pbh = Pbh()
+    pbh = BurstFile()
     fov = 1.75
 
     # to store the value of a sim signal!
@@ -114,7 +114,7 @@ def test_sim_likelihood_from_data(Nsim=1000, N_burst=3, runNum=55480, filename=N
 def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2, 11), runNum=55480, filename=None, sig_bins=50,
                                       bkg_bins=100, ylog=True):
     fov = 1.75
-    pbh = Pbh()
+    pbh = BurstFile()
     pbh.get_tree_with_all_gamma(run_number=runNum, nlines=None)
 
     # if Nsim >= pbh.photon_df.shape[0] - 1:
@@ -178,7 +178,7 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2, 11), runNum=5
 
 def test_burst_finding(window_size=3, runNum=55480, nlines=None, N_scramble=3, plt_log=True, verbose=False,
                        save_hist="test_burst_finding_histo", bkg_method="scramble", rando_method="avg"):
-    pbh = Pbh()
+    pbh = BurstFile()
     pbh.get_tree_with_all_gamma(run_number=runNum, nlines=nlines)
     # do a small list
     # pbh.photon_df = pbh.photon_df[:nlines]
@@ -213,7 +213,7 @@ def test_burst_finding(window_size=3, runNum=55480, nlines=None, N_scramble=3, p
 def test_ll(window_sizes=[1, 2, 5, 10], colors=['k', 'r', 'b', 'magenta'], runNum=55480, N_scramble=3, verbose=False,
             rho_dots=np.arange(0., 5.e5, 100), save_hist="test_ll", bkg_method="scramble", rando_method="avg",
             burst_size=2, xlog=True, grid=True):
-    pbh = Pbh()
+    pbh = BurstFile()
     pbh.get_tree_with_all_gamma(run_number=runNum, nlines=None)
 
     for ii, window_size in enumerate(window_sizes):
@@ -247,7 +247,7 @@ def test_ll(window_sizes=[1, 2, 5, 10], colors=['k', 'r', 'b', 'magenta'], runNu
 
 
 def test1():
-    pbh = Pbh()
+    pbh = BurstFile()
     fov_center = np.array([180., 30.0])
     ras = np.random.random(size=10) * 2.0 + fov_center[0]
     decs = np.random.random(size=10) * 1.5 + fov_center[1]
@@ -264,7 +264,7 @@ def test1():
 
 
 def test_singlet_remover(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
-    pbh = Pbh()
+    pbh = BurstFile()
     fov_center = np.array([180., 30.0])
     fov = 1.75
 
@@ -294,7 +294,7 @@ def test_singlet_remover(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
 
 
 def test2():
-    pbh = Pbh()
+    pbh = BurstFile()
     pbh.get_tree_with_all_gamma(run_number=55480, nlines=1000)
     print(pbh.photon_df.head())
     return pbh

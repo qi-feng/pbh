@@ -3,7 +3,7 @@ import pandas as pd
 import socket
 from optparse import OptionParser
 
-from burst.process import process_one_run
+from burstcalc.process import process_one_run
 
 
 def qsub_job_runlist(filename="pbh_runlist.txt", window_size=10, plot=False, bkg_method="scramble",

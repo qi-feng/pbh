@@ -1,6 +1,12 @@
 # test files for development and verification
 TestFiles/
+Plots/
 
 # pycharm files
 __pycache__/
 burst/__pycache__/
+
+
+#build folders
+burstcalc.egg-info/
+dist/

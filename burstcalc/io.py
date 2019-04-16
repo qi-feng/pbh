@@ -13,10 +13,7 @@ else:
 import pandas as pd
 import tables
 
-from burst.pbh import Pbh_combined
-
-
-
+from burstcalc.pbh import Pbh_combined
 
 
 def load_hdf5(fname):

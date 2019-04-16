@@ -22,7 +22,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='burst',
+    name='burstcalc',
 
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
@@ -41,7 +41,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'run_burst=burst:main',
+            'run_burst=burstcalc:main',
+            'run1burst=burstcalc:run1'
         ],
     },
 )

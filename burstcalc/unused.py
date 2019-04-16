@@ -3,8 +3,8 @@ import shutil
 import pandas as pd
 import numpy as np
 
-from burst.pbh import Pbh
-from burst.io import combine_from_pickle_list
+from burstcalc.pbh import Pbh
+from burstcalc.io import combine_from_pickle_list
 
 
 def filter_good_runlist(infile="batch_all_v3/runlist_Final.txt", outfile="goodruns.txt"):
