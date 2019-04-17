@@ -32,15 +32,15 @@ def test_psf_func(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
         rand_bkg_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_bkg_theta)
         rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
-    cent_bkg, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
-    cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
+    cent_bkg, ll_bkg = pbh.find_optimum_centroid(rand_bkg_coords, psfs)
+    cent_sig, ll_sig = pbh.find_optimum_centroid(rand_sig_coords, psfs)
 
     ax = pbh.plot_skymap(rand_bkg_coords, rand_Es, [EL] * Nburst, color='b', fov_center=fov_center,
                          cent_coords=cent_bkg, cent_marker='+', cent_ms=cent_ms, cent_mew=cent_mew,
-                         label=("bkg ll=%.2f" % ll_bkg))
+                         label=("bkg ll_counts=%.2f" % ll_bkg))
     pbh.plot_skymap(rand_sig_coords, rand_Es, [EL] * Nburst, color='r', fov_center=fov_center, ax=ax,
                     cent_coords=cent_sig, cent_ms=cent_ms, cent_mew=cent_mew,
-                    label=("sig ll=%.2f" % ll_sig))
+                    label=("sig ll_counts=%.2f" % ll_sig))
     if filename is not None:
         plt.savefig(filename)
     plt.show()
@@ -143,14 +143,14 @@ def test_sim_likelihood_from_data_all(Nsim=1000, N_bursts=range(2, 11), runNum=5
                 rand_sig_coords = np.zeros((N_burst, 2))
                 psfs = this_slice.psfs.values
 
-                fov_center, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
+                fov_center, ll_bkg = pbh.find_optimum_centroid(rand_bkg_coords, psfs)
 
                 for i in range(N_burst):
                     psf_width = psfs[i]
                     rand_sig_theta = pbh.gen_one_random_theta(psf_width, prob="psf", fov=fov)
                     rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
-                cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
+                cent_sig, ll_sig = pbh.find_optimum_centroid(rand_sig_coords, psfs)
                 ll_bkg_all[xx, sim_counter] = ll_bkg
                 ll_sig_all[xx, sim_counter] = ll_sig
                 sim_counter += 1
@@ -182,7 +182,7 @@ def test_burst_finding(window_size=3, runNum=55480, nlines=None, N_scramble=3, p
     pbh.get_tree_with_all_gamma(run_number=runNum, nlines=nlines)
     # do a small list
     # pbh.photon_df = pbh.photon_df[:nlines]
-    sig_burst_hist, sig_burst_dict = pbh.sig_burst_search(window_size=window_size, verbose=verbose)
+    sig_burst_hist, sig_burst_dict = pbh.signal_burst_search(window_size=window_size, verbose=verbose)
 
     # avg_bkg_hist = pbh.estimate_bkg_burst(window_size=window_size, method="scramble_times", copy=True, n_scramble=N_scramble)
     avg_bkg_hist, bkg_burst_dicts = pbh.estimate_bkg_burst(window_size=window_size, method=bkg_method,
@@ -217,7 +217,7 @@ def test_ll(window_sizes=[1, 2, 5, 10], colors=['k', 'r', 'b', 'magenta'], runNu
     pbh.get_tree_with_all_gamma(run_number=runNum, nlines=None)
 
     for ii, window_size in enumerate(window_sizes):
-        sig_burst_hist, sig_burst_dict = pbh.sig_burst_search(window_size=window_size, verbose=verbose)
+        sig_burst_hist, sig_burst_dict = pbh.signal_burst_search(window_size=window_size, verbose=verbose)
         avg_bkg_hist, bkg_burst_dicts = pbh.estimate_bkg_burst(window_size=window_size, method=bkg_method,
                                                                rando_method=rando_method,
                                                                copy=True, n_scramble=N_scramble, return_burst_dict=True,
@@ -253,7 +253,7 @@ def test1():
     decs = np.random.random(size=10) * 1.5 + fov_center[1]
     coords = np.concatenate([ras.reshape(10, 1), decs.reshape(10, 1)], axis=1)
     psfs = np.ones(10) * 0.1
-    centroid = pbh.minimize_centroid_ll(coords, psfs)
+    centroid = pbh.find_optimum_centroid(coords, psfs)
 
     print(centroid)
     print(centroid.reshape(1, 2)[:, 0], centroid.reshape(1, 2)[:, 1])
@@ -287,6 +287,9 @@ def test_singlet_remover(Nburst=10, filename=None, cent_ms=8.0, cent_mew=1.8):
         rand_bkg_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_bkg_theta)
         rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
+    # TODO: FIX ME
+    #  I broke this by removing the function, the aim was to clean up the processing code and move testing code
+    #  outside the main scope
     pbh.read_photon_list(np.arange(10), rand_bkg_coords[:, 0], rand_bkg_coords[:, 1], rand_Es, np.ones(10) * EL)
     slice = np.arange(10)
     slice, singlet_slice = pbh.singlet_remover(slice)

@@ -16,7 +16,7 @@ def calc_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0):
 
 def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=range(2, 11), lss=['-', '--', ':'],
              cs=['r', 'b', 'k'],
-             draw_grid=True, filename="ll.png", verbose=True):
+             draw_grid=True, filename="ll_counts.png", verbose=True):
     for i, window_ in enumerate(window_sizes):
         n_exps = np.zeros_like(burst_sizes).astype('float64')
         lls = np.zeros_like(burst_sizes).astype('float64')
@@ -29,13 +29,13 @@ def sum_ll00(pbh, rho_dot, total_time_year=None, window_sizes=[1], burst_sizes=r
             #      (total_time_year, rho_dot, Veff))
             n_expected = 0.9 * rho_dot * total_time_year * Veff
             n_exps[j] = n_expected
-            # print("n_expected=%.10f ll=%.10f" % (n_expected, ll(0, 0, n_expected)))
+            # print("n_expected=%.10f ll_counts=%.10f" % (n_expected, ll_counts(0, 0, n_expected)))
             Veffs.append(Veff)
             lls[j] = float(calc_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0))
-            # lls[j] = ll(0, 0, n_expected)
+            # lls[j] = ll_counts(0, 0, n_expected)
             if verbose:
                 print("Burst size %d" % b)
-                print("n_expected=%.10f ll=%.10f" % (
+                print("n_expected=%.10f ll_counts=%.10f" % (
                     n_expected, calc_ll(total_time_year, rho_dot, Veff, n_on=0, n_off=0)))
                 print("log likelihood for burst size %d, 0 ON and 0 OFF is %.5f" % (b, lls[j]))
         plt.plot(burst_sizes, lls, color=cs[i], ls=lss[i], label=("search window %d s" % window_))

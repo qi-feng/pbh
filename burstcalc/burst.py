@@ -1,7 +1,5 @@
-import sys
-import os
 import random
-from math import factorial
+from collections import Counter
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,27 +9,18 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import pandas as pd
 
 from scipy.optimize import minimize
-from scipy import integrate
-from scipy.special import gamma
 
 from astropy import units as u
+from astropy.coordinates import SkyCoord
 
-# from burstcalc.io import *
 from burstcalc.veritas import VeritasFile
 
 
 class BurstFile(VeritasFile):
-    '''
-    A single run processing of a burst search.
-
-
-    '''
-
     def __init__(self, run_number, data_dir, using_ed=True, num_ev_to_read=None, debug=False,
                  veritas_deadtime_ms=0.33e-3):
         super().__init__(run_number=run_number, data_dir=data_dir, using_ed=using_ed, num_ev_to_read=num_ev_to_read,
                          debug=debug)
-
         # TODO: remove me - this should come from the run file
         # or if it is only used in the sims then it should come from config file or ...
         self.veritas_deadtime_ms = veritas_deadtime_ms
@@ -39,10 +28,8 @@ class BurstFile(VeritasFile):
         # the cut on -2lnL, consider smaller values accepted for events coming from the same centroid
         # selected based on sims at 90% efficiency
         # TODO: document where this came from better
-        # TODO: what is the difference between ll_cut and ll_cut_dict
 
         # self.ll_cut = -9.5
-        self.ll_cut = -8.6
 
         # TODO: document where the LL cut came from better
 
@@ -59,6 +46,9 @@ class BurstFile(VeritasFile):
         # self.ll_cut_dict = {2:-6.68,3:-6.74,4:-6.71, 5:-6.76, 6:-6.8, 7:-6.84, 8:-6.88, 9:-6.92, 10:-6.96}
         # new cuts using scrambled data (2017-06-13) 6 runs mean:
         self.ll_cut_dict = {2: -6.95, 3: -6.95, 4: -6.96, 5: -6.99, 6: -7.03, 7: -7.07, 8: -7.12, 9: -7.16, 10: -7.18}
+
+        # if not in the above dict then use the following as a default value
+        self.ll_cut = -8.6
 
         # TODO: document where the PSF came from better
         # TODO: load PSF from a config file so that we can make it depend upon the cuts used
@@ -85,11 +75,16 @@ class BurstFile(VeritasFile):
         #   1 to 50 TeV
         self.psf_lookup[3, :] = np.array([0.031, 0.028, 0.027])
 
+        # TODO: remove when done - fudge for now to spead up testing
+        self.psf_lookup *= 100
+
         self.temp_burst_dict = {}  # {"Burst #": [event # in this burst]}, for internal use
 
         # used in plotting paramerters
         self.plotting_colors = (["b", "r", "k", "g"])
         self.plotting_markers = (["+", "x", "o", "t"])
+
+        # TODO: time cuts - how are these being handled?  With VEGAS this is before time cuts are applied
 
     def plot_psf_2dhist(self):
         '''
@@ -108,7 +103,7 @@ class BurstFile(VeritasFile):
         cax = divider.append_axes('right', size='5%', pad=0.05)
         fig.colorbar(im1, cax=cax, orientation='vertical')
 
-        #TODO: when interpolation is added properly plot that as well here in ax[1][0]
+        # TODO: when interpolation is added properly plot that as well here in ax[1][0]
 
         e_means = (self.energy_grid_tev[:-1] + self.energy_grid_tev[1:]) / 2.
         el_means = (self.elevation_grid_deg[:-1] + self.elevation_grid_deg[1:]) / 2.
@@ -125,7 +120,7 @@ class BurstFile(VeritasFile):
         self.logger.debug(el_means)
         for i, e in enumerate(el_means):
             label = "{0:.2f}$^\circ$".format(e)
-            ax[1][1].plot(e_means, self.psf_lookup[:,i], label=label, marker="+", ls="--")
+            ax[1][1].plot(e_means, self.psf_lookup[:, i], label=label, marker="+", ls="--")
         ax[1][1].set_xscale('log')
         ax[1][1].set_xlabel('Energy [TeV]')
         ax[1][1].set_ylabel('PSF [deg]')
@@ -133,33 +128,6 @@ class BurstFile(VeritasFile):
         plt.tight_layout()
         fig.savefig("Plots/PSF.pdf")
 
-    def read_photon_list(self, ts, right_ascensions, declinations, energies, elevations):
-        N_ = len(ts)
-        assert N_ == len(right_ascensions) and N_ == len(declinations) and N_ == len(energies) and N_ == len(
-            elevations), \
-            "Make sure input lists (ts, right_ascensions, declinations, energies, elevations) are of the same dimension"
-        columns = ['MJDs', 'ts', 'right_ascensions', 'declinations', 'energies', 'elevations', 'psfs', 'burst_sizes',
-                   'fail_cut']
-        df_ = pd.DataFrame(np.array([np.zeros(N_)] * len(columns)).T,
-                           columns=columns)
-        df_.ts = ts
-        df_.RAs = right_ascensions
-        df_.Decs = declinations
-        df_.Es = energies
-        df_.ELs = elevations
-        # df_.coords = np.concatenate([df_.right_ascensions.reshape(N_,1), df_.declinations.reshape(N_,1)], axis=1)
-        df_.psfs = np.zeros(N_)
-        df_.burst_sizes = np.ones(N_)
-        # self.photon_df = df_
-        # if event.Energy<E_lo_cut or event.Energy>E_hi_cut or event.TelElevation<EL_lo_cut:
-        #    df_.fail_cut.at[i] = 1
-        #    continue
-        df_.fail_cut = np.zeros(N_)
-        # clean events that did not pass cut:
-        self.photon_df = df_[df_.fail_cut == 0]
-
-        # determine the psf for each photon
-        self.get_psf_lists()
 
     def get_tree_with_all_gamma(self):
         '''
@@ -177,33 +145,25 @@ class BurstFile(VeritasFile):
         self.logger.info("There are {0:d} events, {1:d} of which are gamma-like and pass cuts".format(self.N_all_events,
                                                                                                       self.N_gamma_events))
 
-        self.df_.psfs = np.zeros(self.N_all_events)
-
-        # by def all events are at least a singlet
-        self.df_.burst_sizes = np.ones(self.N_all_events)
-
-        # clean events that did not pass cut:
-        self.photon_df = self.df_[self.df_.fail_cut == 0].copy()
-        self.logger.debug("Loaded photon list")
         self.logger.debug(self.photon_df)
-
-        # reindexing
-        # self.photon_df.index = range(self.photon_df.shape[0])
 
         # determine the psf for each photon
         self.get_psf_lists()
 
     def get_run_summary(self):
+        '''
+        Load the run summary information from the VEGAS file, also loads the IRFs
+        :return:
+        '''
         self.load_run_summary()
         self.total_time_year = self.run_live_time.to(u.year)
-
         self.load_irfs()
 
-    def scramble_times(self, copy=True, all_events=True):
+    def scramble_times(self, copy=True, gamma_times_only=True):
         '''
         Estimate the background by scrambling the original event times.
         :param copy: backup data before scrambling?
-        :param all_events: shuffle times prior to gamma/hadron cuts or
+        :param gamma_times_only: shuffle times after to gamma/hadron cuts
         '''
         if not hasattr(self, 'photon_df'):
             raise Exception("Call get_tree_with_all_gamma first...")
@@ -215,15 +175,16 @@ class BurstFile(VeritasFile):
             self.photon_df_orig = self.photon_df.copy()
 
         # shuffle the events, either using the times of all the events or the times for the post cut events
-        if all_events:
-            self.logger.debug("Shuffle among the arrival time of all events")
-            # TODO: this will have wider time spread than just selecting the first X events times need to fix this
-            random.shuffle(self.all_times)
-            ts_ = self.all_times[:self.N_gamma_events]
-        else:
-            self.logger.debug("Shuffle among the arrival time of gamma events")
+        if gamma_times_only:
+            self.logger.debug("Shuffle among the arrival times of gamma events only")
             ts_ = self.photon_df.ts.values
             random.shuffle(ts_)
+        else:  # use all events
+            self.logger.debug("Shuffle among the arrival times of all events")
+
+            # Note: If we are only using a subset of the data we only loaded that subset of the data into all_times
+            random.shuffle(self.all_times)
+            ts_ = self.all_times[:self.N_gamma_events]
 
         # update times with shuffled times
         self.logger.debug("Shuffled = {0:d}, original = {1:d}, num gamma = {2:d}".format(len(ts_),
@@ -234,18 +195,24 @@ class BurstFile(VeritasFile):
         # re-init temp_burst_dict for counting
         self.temp_burst_dict = {}
 
-        # sort by new times
-        self.logger.debug("Sorting events based upon their new time stamps")
+        # sort by new times and reindex
+        self.logger.debug("Sorting events based upon their new time stamps and reindexing")
+        self.logger.debug(self.photon_df)
         if pd.__version__ > '0.18':
             self.photon_df = self.photon_df.sort_values('ts')
         else:
             self.photon_df = self.photon_df.sort('ts')
 
-    def random_times(self, copy=True, rate="avg", all_events=True):
+        self.photon_df.index = range(self.photon_df.shape[0])
+
+        self.logger.debug("Sorted")
+        self.logger.debug(self.photon_df)
+
+    def random_times(self, copy=True, rate="cell", all_events=True):
         '''
         Estimate the background using random times calculated using a poisson dist.
         :param copy: backup data before scrambling?
-        :param rate: method for calculating the background times
+        :param rate: method for calculating the background times (avg or cell) - only cell implemented
         :param all_events: use all events or only those passing gamma/hadron cuts
         '''
         if not hasattr(self, 'photon_df'):
@@ -269,7 +236,7 @@ class BurstFile(VeritasFile):
         else:
             N = self.photon_df.shape[0]
             rate_expected = N * 1.0 / (self.photon_df.ts.values[-1] - self.photon_df.ts.values[0])
-        print("Mean expected rate is %.2f" % rate_expected)
+        self.logger.info("Mean expected rate is %.2f" % rate_expected)
 
         for i in range(N - 1):
             if rate == "cell":
@@ -306,24 +273,7 @@ class BurstFile(VeritasFile):
         # re-init temp_burst_dict for counting
         self.temp_burst_dict = {}
 
-    # @autojit
-    def psf_func(self, theta2, psf_width, N=100):
-        return 1.7142 * N / 2. / np.pi / (psf_width ** 2) / np.cosh(np.sqrt(theta2) / psf_width)
-        # equivalently:
-        # return (stats.hypsecant.pdf(np.sqrt(theta2s)/psf_width)*1.7142/2./psf_width**2)
 
-    def psf_cdf(self, psf_width, fov=1.75):
-        """
-        :param psf_width: same as psf_func
-        :param fov: given so that we calculate cdf from 0 to fov
-        :return:
-        """
-        _thetas = np.arange(0, fov, 0.001)
-        _theta2s = _thetas ** 2
-        # cdf = np.cumsum(self.psf_func(theta2s, psf_width, N=1))
-        cdf = integrate.cumtrapz(self.psf_func(_theta2s, psf_width, N=1), _thetas, initial=0)
-        cdf = cdf / np.max(cdf)
-        return cdf
 
     def get_psf(self, E=0.1, EL=80):
         '''
@@ -335,7 +285,6 @@ class BurstFile(VeritasFile):
         '''
         energy_bin = np.digitize(E, self.energy_grid_tev, right=True) - 1
         elevation_bin = np.digitize(EL, self.elevation_grid_deg, right=True) - 1
-        # self.logger.debug("Energy bin = {0:d}, elevation bin = {1:d}".format(energy_bin, elevation_bin))
         # TODO: add interpolation here - it must be better!!
         return self.psf_lookup[energy_bin, elevation_bin]
 
@@ -352,176 +301,102 @@ class BurstFile(VeritasFile):
         self.logger.debug("Calculated PSFs")
         self.logger.debug(self.photon_df)
 
-    # @autojit
-    def get_angular_distance(self, coord1, coord2):
-        """
-        coord1 and coord2 are in [ra, dec] format in degrees
-        """
-        return np.rad2deg(np.arccos(np.sin(np.deg2rad(coord1[1])) * np.sin(np.deg2rad(coord2[1]))
-                                    + np.cos(np.deg2rad(coord1[1])) * np.cos(np.deg2rad(coord2[1])) *
-                                    np.cos(np.deg2rad(coord1[0]) - np.deg2rad(coord2[0]))))
+    def minus_centroid_log_likelihood(self, cent_coord, coords, psfs):
+        '''
+        Calculate -1.*ln(L) of the centroid position
+        Inputs cannot be astropy coords as used in minimizer, however, we convert internally for ease
+        :param cent_coord: coordinates of the centroid [ra, dec]
+        :param coords: coordinates of the events [[ras], [decs]]
+        :param psfs: psfs of the events
+        :return: -2.*ln(L)
+        '''
+        # calculate the separations in deg from the centroid
+        cent_coord = SkyCoord(cent_coord[0]*u.deg, cent_coord[1]*u.deg)
+        coords = SkyCoord(coords[0]*u.deg, coords[1]*u.deg)
 
-    # @autojit
-    def get_all_angular_distance(self, coords, cent_coord):
-        assert coords.shape[1] == 2
-        dists = np.zeros(coords.shape[0])
-        for i, coord in enumerate(coords):
-            dists[i] = self.get_angular_distance(coord, cent_coord)
-        return dists
+        # separation returns an absolute distance
+        thetas = cent_coord.separation(coords).deg
 
-    def gen_one_random_coords_projected_plane(self, cent_coord, theta):
-        """
-        *** Here use small angle approx, as it is only a sanity check ***
-        :return a pair of uniformly random RA and Dec at theta deg away from the cent_coord
-        """
-        # the dec of this small circle should be in the range of [cent_dec - theta, cent_dec + theta]
-        delta_dec = (np.random.random() * 2. - 1.) * theta
-        _dec = cent_coord[1] + delta_dec
-        # Note that dec is 90 deg - theta in spherical coordinates
-        _ra = cent_coord[0] + np.rad2deg(np.arccos(
-            np.cos(np.deg2rad(theta)) * (1. / np.cos(np.deg2rad(90. - cent_coord[1]))) * (
-                    1. / np.cos(np.deg2rad(90. - _dec))) \
-            - np.tan(np.deg2rad(90. - cent_coord[1])) * np.tan(np.deg2rad(90. - _dec))))
-        # _ra = cent_coord[0] + rad2deg( np.arccos ( np.cos(deg2rad(theta)) *
-        # (1./np.cos(deg2rad(cent_coord[1]))) * (1./np.cos(deg2rad(_dec))) \
-        #                                           - np.tan(deg2rad(cent_coord[1])) *  np.tan(deg2rad(_dec)) ) )
-        return np.array([_ra, _dec])
-
-    def gen_one_random_coords(self, cent_coord, theta):
-        """
-        *** Here use small angle approx, as it is only a sanity check ***
-        :return a pair of uniformly random RA and Dec at theta deg away from the cent_coord
-        """
-        _phi = np.random.random() * np.pi * 2.
-        # _ra = cent_coord[0] + np.sin(_phi) * theta
-        _ra = cent_coord[0] + np.sin(_phi) * theta / np.cos(np.deg2rad(cent_coord[1]))
-        _dec = cent_coord[1] + np.cos(_phi) * theta
-        return np.array([_ra, _dec])
-
-    def gen_one_random_theta(self, psf_width, prob="psf", fov=1.75):
-        """
-        :prob can be either "psf" that uses the hyper-sec function, or "uniform", or "gauss"
-        """
-        if prob.lower() == "psf" or prob == "hypersec" or prob == "hyper secant":
-            # _rand_theta = np.random.random()*fov
-            _rand_test_cdf = np.random.random()
-            # _thetas = np.arange(0, fov, 0.001)
-            # _theta2s = _thetas ** 2
-            _theta2s = np.arange(0, fov ** 2, 1e-4)
-            _thetas = np.sqrt(_theta2s)
-            _psf_pdf = self.psf_func(_theta2s, psf_width, N=1)
-            # _cdf = np.cumsum(_psf_pdf - np.min(_psf_pdf))
-            # _cdf = integrate.cumtrapz(_psf_pdf, _thetas, initial=0)
-            _cdf = integrate.cumtrapz(_psf_pdf, _theta2s, initial=0)
-            _cdf = _cdf / np.max(_cdf)
-            # y_interp = np.interp(x_interp, x, y)
-            _theta2 = np.interp(_rand_test_cdf, _cdf, _theta2s)
-            return np.sqrt(_theta2)
-        elif prob.lower() == "uniform" or prob == "uni":
-            return np.random.random() * fov
-        # gauss may have a caveat as this is not important
-        elif prob.lower() == "gauss" or prob == "norm" or prob.lower() == "gaussian":
-            return abs(np.random.normal()) * fov
-        else:
-            return "Input prob value not supported"
-
-    def gen_one_random_theta_simon_method(self, psf_width, prob="psf", fov=1.75):
-
-        def fControl(x, psf_width=0.05):
-            return 4. * psf_width / np.pi * np.arctanh(np.tan(np.pi * x / 4.))
-            # return 4.*psf_width/np.pi*np.arctanh(np.exp(np.pi*x/4.))
-
-        def fC_Function(x, psf_width=0.05):
-            return 1. / (psf_width * np.cosh(np.sqrt(x) * 0.5 / psf_width))
-
-        def psf_pdf_simon(x, psf_width=0.05):
-            return 1.7149 / (2 * np.pi * psf_width * np.cosh(np.sqrt(x) * 1.0 / psf_width))
-
-        z0 = 9999.
-        pdf_y0 = 0.
-        y0 = 0.
-        while z0 > pdf_y0:
-            _rand_ = np.random.random()
-            y0 = fControl(_rand_, psf_width=psf_width)
-            c_y0 = fC_Function(y0, psf_width=psf_width)
-            z0 = c_y0 * np.random.random()
-            # z0 = c_y0 * _rand_
-            pdf_y0 = psf_pdf_simon(y0, psf_width)
-            # pdf_y0 = psf_func(y0, psf_width, N=1)
-        return y0
-
-    # @autojit
-    def centroid_log_likelihood(self, cent_coord, coords, psfs):
-        """
-        returns ll=-2*ln(L)
-        """
-        ll = 0
-        dists = self.get_all_angular_distance(coords, cent_coord)
-        theta2s = dists ** 2
-        # self.psf_func(theta2, psf_width, N=1)
-        # ll = -2.* np.log(  1.7142 * N / 2. / np.pi / (psf_width ** 2) / np.cosh(np.sqrt(theta2) / psf_width)  )
-        ll = -2. * np.sum(np.log(psfs)) + np.sum(np.log(1. / np.cosh(np.sqrt(theta2s) / psfs)))
+        # TODO: is this the same psf function as was used earlier - assume so but want to check
+        ll = -2. * np.sum(np.log(psfs)) + np.sum(np.log(1. / np.cosh(np.sqrt(thetas) / psfs)))
         ll += psfs.shape[0] * np.log(1.7142 / np.pi)
-        ll = -2. * ll
-        # return ll
-        # Normalized by the number of events!
-        return ll / psfs.shape[0]
 
-    # @autojit
-    def minimize_centroid_ll(self, coords, psfs):
-        init_centroid = np.mean(coords, axis=0)
-        results = minimize(self.centroid_log_likelihood, init_centroid, args=(coords, psfs), method='L-BFGS-B')
-        centroid = results.x
-        ll_centroid = self.centroid_log_likelihood(centroid, coords, psfs)
+        #TODO: check that the earlier cuts are using the LL not the TS or ...
+        # Normalized by the number of events and multiply by minus 1 so we can get the min not the max
+        # factor of 2 comes because that was here already though I suspect it shouldn't be but then the
+        # other answers make no sense
+        return -2. * ll / psfs.shape[0]
+
+    def find_optimum_centroid(self, coords, psfs):
+        '''
+        Find the centroid with the maximum log likelihood
+        :param coords:
+        :param psfs:
+        :return:
+        '''
+        init_centroid = SkyCoord(np.mean(coords.ra), np.mean(coords.dec))
+        self.logger.debug("Initial centroid {0:.2f}, {1:.2f}".format(init_centroid.ra.deg,init_centroid.dec.deg))
+
+        # minimize not maximize since that is a lot easier!
+        # note that this requires that we minimize the minus log likelihood
+        results = minimize(self.minus_centroid_log_likelihood,
+                           [init_centroid.ra.deg, init_centroid.dec.deg],
+                           args=([coords.ra.deg, coords.dec.deg], psfs),
+                           method='L-BFGS-B')
+
+        centroid = SkyCoord(results.x[0]*u.deg, results.x[1]*u.deg)
+        self.logger.debug("Optimal centroid {0:.2f}, {1:.2f}".format(centroid.ra.deg, centroid.dec.deg))
+
+        # again, to calculate the ll_counts of the centroid we
+        ll_centroid = -1. * self.minus_centroid_log_likelihood([centroid.ra.deg, centroid.dec.deg],
+                                                               [coords.ra.deg, coords.dec.deg],
+                                                               psfs)
         return centroid, ll_centroid
 
     def search_angular_window(self, coords, psfs, slice_index):
-        # Determine if N_evt = coords.shape[0] events are accepted to come from one direction
-        # slice_index is the numpy array slice of the input event numbers, used for temp_burst_dict
-        # return: A) centroid, likelihood, and a list of event numbers associated with this burst,
-        #            given that a burst is found, or the input has only one event
-        #         B) centroid, likelihood, a list of event numbers excluding the outlier, the outlier event number
-        #            given that we reject the hypothesis of a burst
-        ###QF
-        # print coords, slice_index
-        assert coords.shape[0] == slice_index.shape[0], "coords shape " + coords.shape[0] + " and slice_index shape " + \
-                                                        slice_index.shape[0] + " are different"
-        if slice_index.shape[0] == 0:
-            # empty
+        '''
+        Determine if N_evt = len(coords) events are accepted to come from one direction
+        slice_index is the numpy array slice of the input event numbers, used for temp_burst_dict
+        return: A) centroid, likelihood, and a list of event numbers associated with this burst,
+                   given that a burst is found, or the input has only one event
+                B) centroid, likelihood, a list of event numbers excluding the outlier, the outlier event number
+                   given that we reject the hypothesis of a burst
+        :param coords: astropy.coords.SkyCoords list of coordinates
+        :param psfs:
+        :param slice_index:
+        :return:
+        '''
+
+        num_in_slice = len(slice_index)
+
+        assert len(coords) == num_in_slice, \
+            "coords " + len(coords) + " and slice_index  " + num_in_slice + "lengths are different"
+
+        if num_in_slice == 0:
+            self.logger.debug("Slice_index is empty")
             return None, None, None, None
-        if slice_index.shape[0] == 1:
-            # one event:
+        elif num_in_slice == 1:
+            self.logger.debug("Single event")
             return coords, 1, np.array([1])
-        centroid, ll_centroid = self.minimize_centroid_ll(coords, psfs)
-        if slice_index.shape[0] in self.ll_cut_dict.keys():
-            psf_ll_cut = self.ll_cut_dict[slice_index.shape[0]]
-        else:
-            psf_ll_cut = self.ll_cut
-        # if ll_centroid <= self.ll_cut:
-        if ll_centroid <= psf_ll_cut:
+
+        # find centroid
+        centroid, ll_centroid = self.find_optimum_centroid(coords, psfs)
+        self.logger.debug("Centroid ({0:.2f}, {1:.2f}) @ LL {2:.2f}".format(centroid.ra.deg,
+                                                                            centroid.ra.deg,
+                                                                            ll_centroid))
+
+        # get ll_counts cut for given number of events in slice
+        if ll_centroid <= self.ll_cut_dict.get(num_in_slice, self.ll_cut):
             # likelihood passes cut
             # all events with slice_index form a burst candidate
             return centroid, ll_centroid, slice_index
         else:
             # if not accepted, find the worst offender and
             # return the better N_evt-1 events and the outlier event
-            dists = self.get_all_angular_distance(coords, centroid)
+            dists = centroid.separation(coords).deg
             outlier_index = np.argmax(dists)
             mask = np.ones(len(dists), dtype=bool)
             mask[outlier_index] = False
-            # better_coords, better_psfs, outlier_coords, outlier_psfs = coords[mask,:], psfs[mask],\
-            #                                                           coords[outlier_index,:], psfs[outlier_index]
-
-            # better_centroid, better_ll_centroid, better_burst_sizes = self.search_angular_window(better_coords, better_psfs)
-
-            # return centroid, ll_centroid, coords[mask,:], psfs[mask], coords[outlier_index,:], psfs[outlier_index]
-            # return centroid, ll_centroid, slice_index[mask], slice_index[outlier_index]
-            ###QF
-            # print "mask", mask
-            # print "outlier", outlier_index
-            # print "slice_index", slice_index, type(slice_index)
-            # print "search_angular_window returning better events", slice_index[mask]
-            # print "returning outlier events", slice_index[outlier_index]
             return centroid, ll_centroid, slice_index[mask], slice_index[outlier_index]
 
     def search_time_window(self, window_size=1):
@@ -542,63 +417,63 @@ class BurstFile(VeritasFile):
                 "You started a burst search while there are already things in temp_burst_dict, now make it empty")
             self.temp_burst_dict = {}
 
-
         previous_window_start = -1.0
         previous_window_end = -1.0
         previous_singlets = np.array([])
         previous_non_singlets = np.array([])
 
-        # Master event loop:
-        for t in self.photon_df.ts:
-            self.logger.debug("Starting at the event at %.5f" % t)
+        # Master event loop
+        # search for events in a window after a each event
+        for window_start in self.photon_df.ts:
+            window_end = window_start + window_size
+            self.logger.debug("Searching within window {0:.5f} to {1:.5f}".format(window_start, window_end))
             if previous_window_start == -1.0:
                 # first event:
-                previous_window_start = t
-                previous_window_end = t + window_size
+                previous_window_start = window_start
+                previous_window_end = window_end
             else:
                 # below just see if there are new events in the extra time interval after the previous_window_end
                 new_event_slice_tuple = np.where(
-                    (self.photon_df.ts >= previous_window_end) & (self.photon_df.ts < (t + window_size)))
-                previous_window_start = t
-                previous_window_end = t + window_size
+                    (self.photon_df.ts >= previous_window_end) & (self.photon_df.ts < (window_end)))
+                # self.logger.debug("There are {0:d} events in the time slice {1:.2f} to {2:.2f}".format(
+                #     new_event_slice_tuple, t, t+window_size))
+                previous_window_start = window_start
+                previous_window_end = window_end
                 if len(new_event_slice_tuple[0]) == 0:
                     # no new events in the extra window, continue
                     self.logger.debug("no new events found, skipping to next event")
                     continue
 
             # 1. slice events between t and t+window_size
-            slice_index = np.where((self.photon_df.ts >= t) & (self.photon_df.ts < (t + window_size)))
+            time_slice_indices = np.where((self.photon_df.ts >= window_start) & (self.photon_df.ts < (window_end)))
 
             # 2. remove singlets
-            slice_index, singlet_slice_index = self.singlet_remover(np.array(slice_index[0]))
+            time_slice_indices, singlet_time_slice_indices = self.singlet_remover(np.array(time_slice_indices[0]))
 
-            if slice_index is None:
+            if (time_slice_indices is None) or (len(time_slice_indices) == 0):
                 self.logger.debug("All events are singlet in this time window")
-                # All events are singlet, removed all
-                continue
-            elif len(slice_index) == 0:
-                self.logger.debug("All events are singlet in this time window")
-                # All events are singlet, removed all
                 continue
 
             # check if all new events are singlets,
             # if so the current better_events list should be contained in the previous one.
-            # if np.in1d(singlet_slice_index, previous_singlets).all():
-            if np.in1d(slice_index, previous_non_singlets).all():
-                previous_singlets = singlet_slice_index
-                previous_non_singlets = slice_index
+            if np.in1d(time_slice_indices, previous_non_singlets).all():
+                self.logger.debug("All new events are singlets.")
+                previous_singlets = singlet_time_slice_indices
+                previous_non_singlets = time_slice_indices
                 continue
-            previous_singlets = singlet_slice_index
-            previous_non_singlets = slice_index
+            previous_singlets = singlet_time_slice_indices
+            previous_non_singlets = time_slice_indices
 
-            slice_index = tuple(slice_index[:, np.newaxis].T)
+            # time_slice_indices = tuple(time_slice_indices[:, np.newaxis].T)
 
-            _N = self.photon_df.ts.values[slice_index].shape[0]
+            # _N = self.photon_df.ts.values[time_slice_indices].shape[0]
+            num_in_time_slice = len(time_slice_indices)
+            self.logger.debug("There are {0:d} events in the time slice".format(num_in_time_slice))
             # sanity check
-            if _N < 1:
+            if num_in_time_slice < 1:
                 self.logger.debug("All events are singlet, removed all")
                 continue
-            elif _N == 1:
+            elif num_in_time_slice == 1:
                 # a sparse window
                 # self.photon_df.burst_sizes[slice_index] = 1
                 # print "L367", slice_index
@@ -607,17 +482,15 @@ class BurstFile(VeritasFile):
                 continue
 
             # 3. burst searching (in angular window)
-            burst_events, outlier_events = self.search_event_slice(np.array(slice_index[0]))
+            burst_events, outlier_events = self.search_event_slice(time_slice_indices)
             if outlier_events is None:
                 # All events of slice_index form a burst, no outliers; or all events are singlet
-                self.logger.debug("All events form 1 burst")
+                self.logger.debug("All events come from a single burst (or are singlets) - no outliers")
                 continue
             # elif len(outlier_events)==1:
             elif outlier_events.shape[0] == 1:
                 # A singlet outlier
-                # self.photon_df.burst_sizes[outlier_events[0]] = 1
-                # print "L378", outlier_events, outlier_events[0]
-                # self.photon_df.at[outlier_events[0], 'burst_sizes'] = 1
+                self.logger.debug("A singlet outlier was found")
                 continue
             else:
                 # If there is a burst of a subset of events, it's been taken care of,
@@ -635,22 +508,30 @@ class BurstFile(VeritasFile):
                     else:
                         # more than 1 outliers to process,
                         # update outlier_of_outlier_events and repeat the while loop
-                        outlier_burst_events, outlier_of_outlier_events = self.search_event_slice(outlier_of_outlier_events)
+                        outlier_burst_events, outlier_of_outlier_events = self.search_event_slice(
+                            outlier_of_outlier_events)
 
         # the end of master event loop, self.temp_burst_dict is filled
         # now count bursts and fill self.photon_df.burst_sizes:
         self.logger.debug("Counting bursts")
-        # temp_burst_dict = self.temp_burst_dict.copy()
-        self.duplicate_burst_dict()
-        # initialize burst sizes
-        self.photon_df.at[:, 'burst_sizes'] = 1
 
+        # copy the burst dictionary
+        burst_dict = self.temp_burst_dict.copy()
+
+        # initialize burst sizes
+        self.photon_df.burst_sizes = 1
+
+        self.logger.debug("Calculating burst sizes")
         # Note now self.temp_burst_dict will be cleared!!
         self.burst_counting()
+
+        self.logger.debug("Calculated")
+        self.logger.debug(self.photon_df)
+
         burst_hist = self.get_burst_hist()
         self.logger.debug("Found bursts: %s" % burst_hist)
 
-        return burst_hist, self.burst_dict
+        return burst_hist, burst_dict
 
     def singlet_remover(self, slice_index):
         '''
@@ -659,121 +540,94 @@ class BurstFile(VeritasFile):
         :return: new slice_index with singlets (no neighbors in a radius of 5*psf) removed, and a slice of singlets;
                  return None and input slice if all events are singlets
         '''
-        if slice_index.shape[0] == 1:
+        if len(slice_index)== 1:
             # one event, singlet by definition:
-            # return Nones
-            # self.photon_df.at[slice_index[0], 'burst_sizes'] = 1
             return None, slice_index
 
         N_ = self.photon_df.shape[0]
 
-        slice_tuple = tuple(slice_index[:, np.newaxis].T)
+        coord_slice = SkyCoord(self.photon_df.RAs.values[slice_index]*u.deg,
+                               self.photon_df.Decs.values[slice_index]*u.deg)
 
-        coord_slice = np.concatenate([self.photon_df.RAs.values.reshape(N_, 1),
-                                      self.photon_df.Decs.values.reshape(N_, 1)], axis=1)[slice_tuple]
-
-        psf_slice = self.photon_df.psfs.values[slice_tuple]
+        psf_slice = self.photon_df.psfs.values[slice_index]
 
         # default all events are singlet
-        mask_ = np.zeros(slice_index.shape[0], dtype=bool)
+        mask_ = np.zeros_like(slice_index, dtype=bool)
 
         # use a dict of {event_num:neighbor_found} to avoid redundancy
-        none_singlet_dict = {}
-        for i in range(slice_index.shape[0]):
-            if slice_index[i] in none_singlet_dict:
-                # already knew not a singlet
-                continue
-            else:
-                psf_5 = psf_slice[i] * 5.0
+        not_singlet_set = set([])
+        for index, psf, coord in zip(slice_index, psf_slice, coord_slice):
+            if index not in not_singlet_set: #check whether we already know it not a singlet
+                psf_5 = psf * 5.0
 
-                # no need to test (i,j) and (j,i)
-                for j in range(i + 1, slice_index.shape[0]):
-                    self.logger.debug("({0:d}, {1:d}) = {2:f}".format(i, j, self.get_angular_distance(coord_slice[i],
-                                                                                                      coord_slice[j])))
-                    if self.get_angular_distance(coord_slice[i], coord_slice[j]) < psf_5:
-                        # decide this pair isn't singlet
-                        none_singlet_dict[slice_index[i]] = slice_index[j]
-                        none_singlet_dict[slice_index[j]] = slice_index[j]
-                        mask_[i] = True
-                        mask_[j] = True
-                        continue
-        ###QF
-        self.logger.debug("Removed {0:d} singlet, {1:d} good events".format(sum(mask_ == False),
+                # TODO: there has to be a better way of doing this by e.g. only checking indices above a value
+                for index2, coord2 in zip(slice_index, coord_slice):
+                    self.logger.debug(
+                        "({0:d}, {1:d}) = {2:.2f} ({3:.2f})".format(index, index2, coord.separation(coord2).deg,psf_5))
+                    if (index != index2) and (index not in not_singlet_set):
+                        if coord.separation(coord2).deg < psf_5:
+                            # decide this pair isn't singlet
+                            not_singlet_set.add(index)
+                            not_singlet_set.add(index2)
+                            mask_[np.where(slice_index == index)] = True
+                            mask_[np.where(slice_index == index2)] = True
+                            continue
+
+        self.logger.debug("Found {0:d} singlet, {1:d} good events".format(sum(mask_ == False),
                                                                             slice_index[mask_].shape[0]))
+        # this is a slice_index of the singlets and a slice_index of non-singlets
         return slice_index[mask_], slice_index[np.invert(mask_)]
 
-    def search_event_slice(self, slice_index):
-        """
-        temp_burst_dict needs to be clean before starting a new scramble_times
-        :param slice_index: np array of indices of the events in photon_df that the burst search is carried out upon
-        :return: np array of indices of events that are in a burst, indices of outliers (None if no outliers);
-                 in the process fill self.temp_burst_dict for later burst counting
-        """
+    def search_event_slice(self, time_slice_indices):
+        '''
+
+        :param time_slice_indices:
+        :return:
+        '''
         N_ = self.photon_df.shape[0]
-        ###QF
-        # print "Slice"
-        # print slice_index
-        # print "Type"
-        # print type(slice_index)
-        # print "tuple Slice"
-        # print tuple(slice_index)
-        # print "length", len(tuple(np.array(slice_index)[:,np.newaxis].T))
-        # print "Coords"
-        # print "Shape"
-        # print np.concatenate([self.photon_df.RAs.reshape(N_,1), self.photon_df.Decs.reshape(N_,1)], axis=1).shape
-        # print np.concatenate([self.photon_df.RAs.values.reshape(N_,1),
-        # self.photon_df.Decs.values.reshape(N_,1)], axis=1)[tuple(slice_index[:,np.newaxis].T)]
-        # print "PSFs"
-        # print self.photon_df.psfs.values[tuple(slice_index[:,np.newaxis].T)]
+
 
         # First remove singlet
-        # slice_index = self.singlet_remover(slice_index)
-        # print slice_index
-        if slice_index.shape[0] == 0:
-            # all singlets, no bursts, and don't need to check for outliers, go to next event
+        if len(time_slice_indices) == 0:
+            self.logger.debug("all singlets, no bursts, and don't need to check for outliers, go to next event")
             return None, None
 
-        ang_search_res = self.search_angular_window(
-            np.concatenate([self.photon_df.RAs.values.reshape(N_, 1), self.photon_df.Decs.values.reshape(N_, 1)],
-                           axis=1)[
-                tuple(slice_index[:, np.newaxis].T)], self.photon_df.psfs.values[tuple(slice_index[:, np.newaxis].T)],
-            slice_index)
+        # calcuate the first estimate of the centroid
+        initial_coords = SkyCoord(self.photon_df.RAs.values[time_slice_indices]*u.deg,
+                                  self.photon_df.Decs.values[time_slice_indices]*u.deg)
+
+        ang_search_res = self.search_angular_window(initial_coords,
+                                                    self.photon_df.psfs.values[time_slice_indices],
+                                                    time_slice_indices)
         outlier_evts = []
 
         if len(ang_search_res) == 3:
             # All events with slice_index form 1 burst
-            centroid, ll_centroid, burst_events = ang_search_res
+            _, _, burst_events = ang_search_res
             self.temp_burst_dict[len(self.temp_burst_dict) + 1] = burst_events
-            # count later
-            # self.photon_df.burst_sizes[slice_index] = len(burst_events)
             # burst_events should be the same as slice_index
             return burst_events, None
         else:
-            while (len(ang_search_res) == 4):
+            while len(ang_search_res) == 4:
                 # returned 4 meaning no bursts, and the input has more than one events, shall continue
                 # this loop breaks when a burst is found or only one event is left,
                 # in which case return values has a length of 3
-                better_centroid, better_ll_centroid, _better_events, _outlier_events = ang_search_res
-                outlier_evts.append(_outlier_events)
+                _, _, better_event_indices, outlier_event_indices = ang_search_res
+                outlier_evts.append(outlier_event_indices)
                 ###QF
-                # print tuple(_better_events), _better_events
-                # better_coords = np.concatenate([self.photon_df.RAs.reshape(N_,1),
-                # self.photon_df.Decs.reshape(N_,1)], axis=1)[tuple(_better_events)]
-                better_coords = \
-                    np.concatenate(
-                        [self.photon_df.RAs.values.reshape(N_, 1), self.photon_df.Decs.values.reshape(N_, 1)], axis=1)[
-                        (_better_events)]
+                better_coords = SkyCoord(self.photon_df.RAs.values[better_event_indices]*u.deg,
+                                  self.photon_df.Decs.values[better_event_indices]*u.deg)
                 # print "in search_event_slice, candidate coords and psfs: ", better_coords,
                 # self.photon_df.psfs.values[(_better_events)]
                 ang_search_res = self.search_angular_window(better_coords,
-                                                            self.photon_df.psfs.values[(_better_events)],
-                                                            _better_events)
+                                                            self.photon_df.psfs.values[better_event_indices],
+                                                            better_event_indices)
+
             # Now that while loop broke, we have a good list and a bad list
-            centroid, ll_centroid, burst_events = ang_search_res
-            if burst_events.shape[0] == 1:
+            _, _, burst_events = ang_search_res
+            if len(burst_events) == 1:
                 # No burst in slice_index found
                 # count later
-                # self.photon_df.burst_sizes[burst_events[0]] = 1
                 return burst_events, np.array(outlier_evts)
             else:
                 # A burst with a subset of events of slice_index is found
@@ -781,76 +635,79 @@ class BurstFile(VeritasFile):
                 # self.photon_df.burst_sizes[tuple(burst_events)] = len(burst_events)
                 return burst_events, np.array(outlier_evts)
 
-    def duplicate_burst_dict(self):
-        # if you want to keep the original burst_dict
-        self.burst_dict = self.temp_burst_dict.copy()
-        return self.burst_dict
-
-    # @autojit
-    def burst_counting_recur(self):
-        """
-        :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
-        """
-        # Only to be called after self.temp_burst_dict is filled
-        # Find the largest burst
-        largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
-        for evt in self.temp_burst_dict[largest_burst_number]:
-            # Assign burst size to all events in the largest burst
-            self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
-            # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
-            for key in self.temp_burst_dict.keys():
-                # Now delete the assigned events in all other candiate bursts to avoid double counting
-                if evt in self.temp_burst_dict[key] and key != largest_burst_number:
-                    # self.temp_burst_dict[key].remove(evt)
-                    self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
-        # Delete the largest burst, which is processed above
-        self.temp_burst_dict.pop(largest_burst_number, None)
-        # repeat while there are unprocessed bursts in temp_burst_dict
-        if len(self.temp_burst_dict) >= 1:
-            self.burst_counting_recur()
+    # def burst_counting_recur(self):
+    #     """
+    #     :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
+    #     """
+    #     # Only to be called after self.temp_burst_dict is filled
+    #     # Find the largest burst
+    #     largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
+    #     burst_size = self.temp_burst_dict[largest_burst_number].shape[0]
+    #     self.logger.debug("Largest burst number {0:d} with {1:d} events.".format(largest_burst_number, burst_size))
+    #
+    #     for evt in self.temp_burst_dict[largest_burst_number]:
+    #         # Assign burst size to all events in the largest burst
+    #         self.photon_df.at[evt, 'burst_sizes'] = burst_size
+    #         # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
+    #         for key in self.temp_burst_dict.keys():
+    #             # Now delete the assigned events in all other candiate bursts to avoid double counting
+    #             if evt in self.temp_burst_dict[key] and key != largest_burst_number:
+    #                 # self.temp_burst_dict[key].remove(evt)
+    #                 self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
+    #
+    #     # Delete the largest burst, which is processed above
+    #     self.temp_burst_dict.pop(largest_burst_number, None)
+    #
+    #     # repeat while there are unprocessed bursts in temp_burst_dict
+    #     if len(self.temp_burst_dict) >= 1:
+    #         self.burst_counting_recur()
 
     def burst_counting(self):
-        """
-        :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
-        """
-        # Only to be called after self.temp_burst_dict is filled
-        while len(self.temp_burst_dict) >= 1:
-            # Find the largest burst
-            largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
-            for evt in self.temp_burst_dict[largest_burst_number]:
-                # Assign burst size to all events in the largest burst
-                self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
-                # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
-                for key in self.temp_burst_dict.keys():
-                    # Now delete the assigned events in all other candiate bursts to avoid double counting
-                    if evt in self.temp_burst_dict[key] and key != largest_burst_number:
-                        # self.temp_burst_dict[key].remove(evt)
-                        self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
-            # Delete the largest burst, which is processed above
-            self.temp_burst_dict.pop(largest_burst_number, None)
-            # repeat while there are unprocessed bursts in temp_burst_dict
-            # if len(self.temp_burst_dict) >= 1:
-            #    self.burst_counting()
+        '''
 
-    def burst_counting_fractional(self):
-        """
-        :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
-        """
-        # Only to be called after self.temp_burst_dict is filled
+        :return:
+        '''
+        self.logger.debug(self.temp_burst_dict)
         while len(self.temp_burst_dict) >= 1:
             # Find the largest burst
             largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
+            burst_size = self.temp_burst_dict[largest_burst_number].shape[0]
+            self.logger.debug("Largest burst number {0:d} with {1:d} events.".format(largest_burst_number, burst_size))
+
             for evt in self.temp_burst_dict[largest_burst_number]:
                 # Assign burst size to all events in the largest burst
-                self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
-                # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
+                # Use index location rather than names to since we have sorted by time
+                self.photon_df.iloc[evt, 8] = burst_size
+
                 for key in self.temp_burst_dict.keys():
                     # Now delete the assigned events in all other candiate bursts to avoid double counting
                     if evt in self.temp_burst_dict[key] and key != largest_burst_number:
                         # self.temp_burst_dict[key].remove(evt)
-                        self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
+                        self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key],
+                                                              np.where(self.temp_burst_dict[key] == evt))
+
             # Delete the largest burst, which is processed above
             self.temp_burst_dict.pop(largest_burst_number, None)
+
+    # def burst_counting_fractional(self):
+    #     """
+    #     :return: nothing but fills self.photon_df.burst_sizes, during the process self.temp_burst_dict is emptied!
+    #     """
+    #     # Only to be called after self.temp_burst_dict is filled
+    #     while len(self.temp_burst_dict) >= 1:
+    #         # Find the largest burst
+    #         largest_burst_number = max(self.temp_burst_dict, key=lambda x: len(set(self.temp_burst_dict[x])))
+    #         for evt in self.temp_burst_dict[largest_burst_number]:
+    #             # Assign burst size to all events in the largest burst
+    #             self.photon_df.at[evt, 'burst_sizes'] = self.temp_burst_dict[largest_burst_number].shape[0]
+    #             # self.photon_df.burst_sizes[evt] = len(self.temp_burst_dict[largest_burst_number])
+    #             for key in self.temp_burst_dict.keys():
+    #                 # Now delete the assigned events in all other candiate bursts to avoid double counting
+    #                 if evt in self.temp_burst_dict[key] and key != largest_burst_number:
+    #                     # self.temp_burst_dict[key].remove(evt)
+    #                     self.temp_burst_dict[key] = np.delete(self.temp_burst_dict[key], np.where(self.temp_burst_dict[key] == evt))
+    #         # Delete the largest burst, which is processed above
+    #         self.temp_burst_dict.pop(largest_burst_number, None)
 
     def get_burst_hist(self):
         '''
@@ -862,121 +719,71 @@ class BurstFile(VeritasFile):
             burst_hist[i] = np.sum(self.photon_df.burst_sizes.values == i) / i
         return burst_hist
 
-    def sig_burst_search(self, window_size=1):
-        self.sig_burst_hist, self.sig_burst_dict = self.search_time_window(window_size=window_size)
-
-    def estimate_bkg_burst(self, window_size=1, method="scramble_times", copy=True, n_scramble=10, rando_method="avg",
-                           all=True):
+    def signal_burst_search(self, window_size=1):
         '''
 
+        :param window_size:
+        :return:
+        '''
+        self.signal_burst_hist, self.signal_burst_dict = self.search_time_window(window_size=window_size)
+
+    def estimate_bkg_burst(self, window_size=1, method="scramble_times", copy=True, n_scramble=10, rando_method="avg",
+                           gamma_times_only=False):
+        '''
+        Estimate the background burst probability distribution
         :param window_size: window size in s
-        :param method: either scramble_times or rando
-        :param copy:
+        :param method: either scramble_times (shuffle existing times) or rando (generate fake times)
+        :param copy: backup photon_df first
         :param n_scramble: number of times to sample the background data
-        :param rando_method:
+        :param rando_method: method used in rando (cell or avg) only cell implemented
         :param all:
         :return:
         '''
-        self.logger.debug("Using method {0:s}".format(method))
+        self.num_scramble = n_scramble
+        self.logger.debug("Using method {0:s} and scrambling {1:d} times".format(method, self.num_scramble))
 
         # Note that from now on we are CHANGING the photon_df!
         self.bkg_burst_hists = []
-        self.bkg_burst_dicts = []
-        for _ in range(n_scramble):
+
+        for _ in range(self.num_scramble):
             # scramble_times the data
             if method == "scramble_times":
-                self.scramble_times(copy=copy, all_events=all)
+                self.scramble_times(copy=copy, gamma_times_only=gamma_times_only)
             elif method == "rando":
                 self.random_times(copy=copy, rate=rando_method)
             else:
-                 raise Exception("You have tried to use method {0:s} which is not a valid method".format(method))
+                raise Exception("You have tried to use method {0:s} which is not a valid method".format(method))
 
             # calculate the hist and dict for background bursts within time window
-            bkg_burst_hist, bkg_burst_dict = self.search_time_window(window_size=window_size)
-
-            self.logger.debug(bkg_burst_dict)
+            bkg_burst_hist, _ = self.search_time_window(window_size=window_size)
 
             # append to list
             self.bkg_burst_hists.append(bkg_burst_hist.copy())
-            self.bkg_burst_dicts.append(bkg_burst_dict.copy())
+            try:
+                self.avg_bkg_hist += Counter(bkg_burst_hist)
+            except AttributeError:
+                self.avg_bkg_hist = Counter(bkg_burst_hist)
 
+        # normalize avg_bkg_hist by number of scrambles
+        for k in self.avg_bkg_hist.keys():
+            self.avg_bkg_hist[k] = self.avg_bkg_hist[k] / self.num_scramble
 
-        all_bkg_burst_sizes = set(k for dic in self.bkg_burst_hists for k in dic.keys())
-        # also a dict
-        avg_bkg_hist = {}
-        # avg_bkg_hist_count = {}
-        for key_ in all_bkg_burst_sizes:
-            key_ = int(key_)
-            for d_ in self.bkg_burst_hists:
-                if key_ in d_:
-                    if key_ in avg_bkg_hist:
-                        avg_bkg_hist[key_] += d_[key_]
-                        # avg_bkg_hist_count[key_] += 1
-                    else:
-                        avg_bkg_hist[int(key_)] = d_[key_]
-                        # avg_bkg_hist_count[int(key_)] = 1
-
-        for k in avg_bkg_hist.keys():
-            # avg_bkg_hist[k] /= avg_bkg_hist_count[k]*1.0
-            avg_bkg_hist[k] /= n_scramble * 1.0
-
-        self.avg_bkg_hist = avg_bkg_hist.copy()
-
+        self.logger.debug("Calculated average background")
+        self.logger.debug(self.avg_bkg_hist)
 
     def get_residual_hist(self):
         residual_dict = {}
-        sig_bkg_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+        sig_bkg_burst_sizes = set(k for dic in [self.signal_burst_hist, self.avg_bkg_hist] for k in dic.keys())
         # fill with zero if no burst size count
         for key_ in sig_bkg_burst_sizes:
             key_ = int(key_)
-            if key_ not in self.sig_burst_hist:
-                self.sig_burst_hist[key_] = 0
+            if key_ not in self.signal_burst_hist:
+                self.signal_burst_hist[key_] = 0
             if key_ not in self.avg_bkg_hist:
                 self.avg_bkg_hist[key_] = 0
-            residual_dict[key_] = self.sig_burst_hist[key_] - self.avg_bkg_hist[key_]
+            residual_dict[key_] = self.signal_burst_hist[key_] - self.avg_bkg_hist[key_]
         self.residual_dict = residual_dict
         return residual_dict
-
-    def kT_BH(self, t_window):
-        # eq 8.2
-        # temperature (energy in the unit of GeV) of the BH
-        return 7.8e3 * (t_window) ** (-1. / 3)
-
-    def diff_raw_number(self, E, kT_BH):
-        # eq 8.1
-        # The expected dN/dE of gammas at energy E (unit GeV), temp kT_BH(tau)
-        if E < kT_BH:
-            n_exp_gamma = 9.e35 * kT_BH ** (-1.5) * E ** (-1.5)
-        else:
-            n_exp_gamma = 9.e35 * E ** (-3)
-        return n_exp_gamma
-
-    def get_integral_expected(self, kT_BH):
-        # integrate over EA between energies:
-        self.elo = 80.
-        self.ehi = 50000.
-        # the integral part of eq 8.3 with no acceptance raised to 3/2 power (I^3/2 in eq 8.7);
-        # EA normalized to the unit of pc^2
-        # The expected # of gammas
-        if not hasattr(self, 'EA'):
-            print("self.EA doesn't exist, reading it now")
-            self.get_run_summary()
-        # 2D array, energy and (dN/dE * EA)
-        number_expected = np.zeros((self.EA.shape[0], 2))
-        count = 0
-        for e_, ea_ in self.EA:
-            # print e_, ea_
-            diff_n_exp = self.diff_raw_number(10 ** e_ * 1000., kT_BH)
-            number_expected[count, 0] = 10 ** e_ * 1000.
-            number_expected[count, 1] = diff_n_exp * ea_ / (3.086e+16 ** 2)
-            count += 1
-            # 1 pc = 3.086e+16 m
-        energy_cut_indices = np.where((number_expected[:, 0] >= self.elo) & (number_expected[:, 0] <= self.ehi))
-        integral_expected = np.trapz(number_expected[energy_cut_indices, 1], x=number_expected[energy_cut_indices, 0])
-        # This is the "I**(3./2)" in eq 8.7 in Simon's thesis
-        integral_expected = integral_expected ** (3. / 2.)
-        self.logger.debug("The value of I in eq 8.7 is %.2f" % integral_expected)
-        return integral_expected
 
     def get_accept_integral(self, integral_limit=1.5):
         # \int (g(alpha, beta))**(3./2) d(cos(theta)) in eq 8.7
@@ -987,15 +794,6 @@ class BurstFile(VeritasFile):
         accept_int = np.trapz(np.array(acc_) ** (3. / 2) * np.sin(rad_ * np.pi / 180.), x=rad_)
         self.logger.debug("The value of the acceptance integral in eq 8.7 is %.2f" % accept_int)
         return accept_int
-
-    def V_eff(self, burst_size, t_window):
-        # eq 8.7; time is in the unit of year
-        I_Value = self.get_integral_expected(self.kT_BH(t_window))
-        rad_Int = self.get_accept_integral()
-        effVolume = (1. / (8 * np.sqrt(np.pi))) * gamma(burst_size - 1.5) / factorial(
-            burst_size) * I_Value * rad_Int  # * self.total_time_year
-        self.logger.debug("The value of the effective volume (eq 8.7) is %.2f" % effVolume)
-        return effVolume
 
     def n_excess(self, rho_dot, Veff):
         # eq 8.8, or maybe more appropriately call it n_expected
@@ -1008,23 +806,21 @@ class BurstFile(VeritasFile):
         return n_ex
 
     # @autojit
-    def ll(self, n_on, n_off, n_expected):
-        # eq 8.13 without the sum
+    def ll_counts(self, n_on, n_off, n_expected):
+        '''
+        eq 8.13 without the sum
+        :param n_on: number of on counts
+        :param n_off: number of off counts
+        :param n_expected: expected number of counts
+        :return: log likelihood
+        '''
         return -2. * (-1. * n_expected + n_on * np.log(n_off + n_expected))
-
-    """
-    def ll(self, n_on, n_off, n_expected):
-        #eq 8.13 without the sum
-        ll_ = -2. * (-1. * n_expected + n_on * np.log(n_off + n_expected))
-        self.logger.debug("The likelihood value term for the given burst size (eq 8.13 before sum) is %.2f" % ll_)
-        return ll_
-    """
 
     def get_significance(self):
         residual_dict = self.residual_dict
         significance = 0
         for b_, excess_ in residual_dict.items():
-            err_excess_ = np.sqrt(self.sig_burst_hist[b_] + pow(np.sqrt(10 * self.bkg_burst_hists[b_]) / 10, 2))
+            err_excess_ = np.sqrt(self.signal_burst_hist[b_] + pow(np.sqrt(10 * self.bkg_burst_hists[b_]) / 10, 2))
             self.logger.debug("Significance for bin %d has significance %.2f" % (b_, excess_ / err_excess_))
             significance += excess_ / err_excess_
         self.logger.debug("Overall Significance is %d" % significance)
@@ -1034,7 +830,7 @@ class BurstFile(VeritasFile):
         # def get_ll(self, rho_dot, burst_size_threshold, t_window, upper_burst_size=100):
         # eq 8.13, get -2lnL sum above the given burst_size_threshold, for the given search window and rho_dot
         if upper_burst_size is None:
-            all_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+            all_burst_sizes = set(k for dic in [self.signal_burst_hist, self.avg_bkg_hist] for k in dic.keys())
         else:
             all_burst_sizes = range(burst_size_threshold, upper_burst_size + 1)
         ll_ = 0.0
@@ -1046,11 +842,11 @@ class BurstFile(VeritasFile):
             if burst_size >= burst_size_threshold:
                 Veff_ = self.V_eff(burst_size, t_window)
                 n_expected_ = self.n_excess(rho_dot, Veff_)
-                if burst_size not in self.sig_burst_hist:
-                    self.sig_burst_hist[burst_size] = 0
+                if burst_size not in self.signal_burst_hist:
+                    self.signal_burst_hist[burst_size] = 0
                 if burst_size not in self.avg_bkg_hist:
                     self.avg_bkg_hist[burst_size] = 0
-                n_on_ = self.sig_burst_hist[burst_size]
+                n_on_ = self.signal_burst_hist[burst_size]
                 n_off_ = self.avg_bkg_hist[burst_size]
                 if n_on_ < sum_nb:
                     print("reached where n_b < \sum_b n_(b+1), at b={}".format(burst_size))
@@ -1058,7 +854,7 @@ class BurstFile(VeritasFile):
                     break
                 else:
                     self.good_burst_sizes.append(burst_size)
-                ll_ += self.ll(n_on_, n_off_, n_expected_)
+                ll_ += self.ll_counts(n_on_, n_off_, n_expected_)
                 sum_nb += n_on_
                 self.logger.debug(
                     '''Adding - 2lnL at burst size % d, for search window % .1f and
@@ -1082,78 +878,77 @@ class BurstFile(VeritasFile):
                                   upper_burst_size=upper_burst_size)
         return rho_dots, lls_
 
-    # @autojit
-    def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
-                       upper_burst_size=None):
-        # search rho_dots for the minimum -2lnL
-        if not isinstance(rho_dots, np.ndarray):
-            rho_dots = np.asarray(rho_dots)
-        min_ll_ = 1.e5
-        rho_dot_min_ll_ = -1.0
-        if return_arrays:
-            lls_ = np.zeros(rho_dots.shape[0])
-        i = 0
-        for rho_dot_ in rho_dots:
-            ll_ = self.get_ll(rho_dot_, burst_size, t_window, upper_burst_size=upper_burst_size)
-            if ll_ < min_ll_:
-                min_ll_ = ll_
-                rho_dot_min_ll_ = rho_dot_
-            if return_arrays:
-                lls_[i] = ll_
-                i += 1
-        if return_arrays:
-            return rho_dot_min_ll_, min_ll_, rho_dots, lls_
-        return rho_dot_min_ll_, min_ll_
+    # def get_minimum_ll(self, burst_size, t_window, rho_dots=np.arange(0., 3.e5, 100), return_arrays=True,
+    #                    upper_burst_size=None):
+    #     # search rho_dots for the minimum -2lnL
+    #     if not isinstance(rho_dots, np.ndarray):
+    #         rho_dots = np.asarray(rho_dots)
+    #     min_ll_ = 1.e5
+    #     rho_dot_min_ll_ = -1.0
+    #     if return_arrays:
+    #         lls_ = np.zeros(rho_dots.shape[0])
+    #     i = 0
+    #     for rho_dot_ in rho_dots:
+    #         ll_ = self.get_ll(rho_dot_, burst_size, t_window, upper_burst_size=upper_burst_size)
+    #         if ll_ < min_ll_:
+    #             min_ll_ = ll_
+    #             rho_dot_min_ll_ = rho_dot_
+    #         if return_arrays:
+    #             lls_[i] = ll_
+    #             i += 1
+    #     if return_arrays:
+    #         return rho_dot_min_ll_, min_ll_, rho_dots, lls_
+    #     return rho_dot_min_ll_, min_ll_
 
-    def get_ul_rho_dot(self, rho_dots, lls_, min_ll_, margin=1.e-5):
-        """
-        # lls_ is the **SUM** of -2lnL from *ALL* burst sizes
-        """
-        ll_99 = 6.63
-        rho_dots99 = np.interp(0.0, lls_ - min_ll_ - ll_99, rho_dots)
-        if abs(np.interp(rho_dots99, rho_dots, lls_ - min_ll_ - ll_99)) <= margin:
-            return rho_dots99, 0
-        ul_99_idx = (np.abs(lls_ - min_ll_ - ll_99)).argmin()
-        ul_99_idx_all = np.where(abs(lls_ - lls_[ul_99_idx]) < margin)
-        if ul_99_idx_all[0].shape[0] == 0:
-            print("Can't find 99% UL!")
-            return None
-            # sys.exit(1)
-        elif ul_99_idx_all[0].shape[0] > 1:
-            print("More than one 99% UL found, strange!")
-            print("These are rho_dot = %s, and -2lnL = %s" % (rho_dots[ul_99_idx_all], lls_[ul_99_idx_all]))
-            return rho_dots[ul_99_idx_all], lls_[ul_99_idx_all]
-        else:
-            print("99%% UL found at rho_dot = %.0f, and -2lnL = %.2f" % (rho_dots[ul_99_idx], lls_[ul_99_idx]))
-            return rho_dots[ul_99_idx], lls_[ul_99_idx]
+    # def get_ul_rho_dot(self, rho_dots, lls_, min_ll_, margin=1.e-5):
+    #     """
+    #     # lls_ is the **SUM** of -2lnL from *ALL* burst sizes
+    #     """
+    #     ll_99 = 6.63
+    #     rho_dots99 = np.interp(0.0, lls_ - min_ll_ - ll_99, rho_dots)
+    #     if abs(np.interp(rho_dots99, rho_dots, lls_ - min_ll_ - ll_99)) <= margin:
+    #         return rho_dots99, 0
+    #     ul_99_idx = (np.abs(lls_ - min_ll_ - ll_99)).argmin()
+    #     ul_99_idx_all = np.where(abs(lls_ - lls_[ul_99_idx]) < margin)
+    #     if ul_99_idx_all[0].shape[0] == 0:
+    #         print("Can't find 99% UL!")
+    #         return None
+    #         # sys.exit(1)
+    #     elif ul_99_idx_all[0].shape[0] > 1:
+    #         print("More than one 99% UL found, strange!")
+    #         print("These are rho_dot = %s, and -2lnL = %s" % (rho_dots[ul_99_idx_all], lls_[ul_99_idx_all]))
+    #         return rho_dots[ul_99_idx_all], lls_[ul_99_idx_all]
+    #     else:
+    #         print("99%% UL found at rho_dot = %.0f, and -2lnL = %.2f" % (rho_dots[ul_99_idx], lls_[ul_99_idx]))
+    #         return rho_dots[ul_99_idx], lls_[ul_99_idx]
 
-    """
-    # won't work:
-    def get_minimum_ll(self, burst_size, t_window):
-        init_rho_dot = 2.e5
-        results = minimize(self.get_ll, init_rho_dot, args=(burst_size, t_window), method='L-BFGS-B',bounds=[(0,1.e7)])
-        if not results.success:
-            print("Problem finding the minimum log likelihood!! ")
-        minimum_rho_dot = results.x
-        minimum_ll = results.fun
-        self.logger.debug("The minimum -2lnL is %.2f at rho_dot %.1f" % (minimum_ll, minimum_rho_dot) )
-        return minimum_rho_dot, minimum_ll
-    """
+    # """
+    # # won't work:
+    # def get_minimum_ll(self, burst_size, t_window):
+    #     init_rho_dot = 2.e5
+    #     results = minimize(self.get_ll, init_rho_dot, args=(burst_size, t_window), method='L-BFGS-B',bounds=[(0,1.e7)])
+    #     if not results.success:
+    #         print("Problem finding the minimum log likelihood!! ")
+    #     minimum_rho_dot = results.x
+    #     minimum_ll = results.fun
+    #     self.logger.debug("The minimum -2lnL is %.2f at rho_dot %.1f" % (minimum_ll, minimum_rho_dot) )
+    #     return minimum_rho_dot, minimum_ll
+    # """
 
-    def get_likelihood_dict(self):
-        ll_dict = {}
-        residual_dict = self.residual_dict
-
-        sig_bkg_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
-        # fill with zero if no burst size count
-        for key_ in sig_bkg_burst_sizes:
-            key_ = int(key_)
-            if key_ not in self.sig_burst_hist:
-                self.sig_burst_hist[key_] = 0
-            if key_ not in self.avg_bkg_hist:
-                self.avg_bkg_hist[key_] = 0
-            residual_dict[key_] = self.sig_burst_hist[key_] - self.avg_bkg_hist[key_]
-        return residual_dict
+    # def get_likelihood_dict(self):
+    #     ll_dict = {}
+    #     residual_dict = self.residual_dict
+    #
+    #     sig_bkg_burst_sizes = set(k for dic in [self.sig_burst_hist, self.avg_bkg_hist] for k in dic.keys())
+    #     # fill with zero if no burst size count
+    #     for key_ in sig_bkg_burst_sizes:
+    #         key_ = int(key_)
+    #         if key_ not in self.sig_burst_hist:
+    #             self.sig_burst_hist[key_] = 0
+    #         if key_ not in self.avg_bkg_hist:
+    #             self.avg_bkg_hist[key_] = 0
+    #         residual_dict[key_] = self.sig_burst_hist[key_] - self.avg_bkg_hist[key_]
+    #     return residual_dict
 
     def plot_burst_hist(self, filename=None, title="Burst histogram", plt_log=True, error="Poisson"):
         if not hasattr(self, 'sig_burst_hist'):
@@ -1166,22 +961,22 @@ class BurstFile(VeritasFile):
         plt.figure(figsize=(10, 8))
         ax1 = plt.subplot(3, 1, (1, 2))
 
-        if self.avg_bkg_hist.keys() != self.sig_burst_hist.keys():
+        if self.avg_bkg_hist.keys() != self.signal_burst_hist.keys():
             for key in self.avg_bkg_hist.keys():
-                if key not in self.sig_burst_hist:
-                    self.sig_burst_hist[key] = 0
-            for key in self.sig_burst_hist.keys():
+                if key not in self.signal_burst_hist:
+                    self.signal_burst_hist[key] = 0
+            for key in self.signal_burst_hist.keys():
                 if key not in self.avg_bkg_hist:
                     self.avg_bkg_hist[key] = 0
 
         if error is None:
-            sig_err = np.zeros(np.array(self.sig_burst_hist.values()).shape[0])
-            bkg_err = np.zeros(np.array(self.avg_bkg_hist.values()).shape[0])
+            sig_err = np.zeros(len(self.signal_burst_hist))
+            bkg_err = np.zeros(len(self.avg_bkg_hist))
         elif error == "Poisson":
-            sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float64'))
-            bkg_err = np.sqrt(np.array(self.avg_bkg_hist.values()).astype('float64'))
+            sig_err = np.sqrt([v for k, v in self.signal_burst_hist])
+            bkg_err = np.array([np.sqrt(v * self.num_scramble) / self.num_scramble for k, v in self.avg_bkg_hist])
         elif error.lower() == "std":
-            sig_err = np.sqrt(np.array(self.sig_burst_hist.values()).astype('float64'))
+            sig_err = np.sqrt([v for k, v in self.signal_burst_hist])
             all_bkg_burst_sizes = set(k for dic in self.bkg_burst_hists for k in dic.keys())
             bkg_err = np.zeros(sig_err.shape[0])
             for key_ in all_bkg_burst_sizes:
@@ -1190,7 +985,7 @@ class BurstFile(VeritasFile):
         else:
             raise Exception("Unknown error type {0:s}".format(error))
 
-        ax1.errorbar(self.sig_burst_hist.keys()[1:], self.sig_burst_hist.values()[1:], xerr=0.5,
+        ax1.errorbar(self.signal_burst_hist.keys()[1:], self.signal_burst_hist.values()[1:], xerr=0.5,
                      yerr=sig_err[1:], fmt='bs', capthick=0,
                      label="Data")
         ax1.errorbar(self.avg_bkg_hist.keys()[1:], self.avg_bkg_hist.values()[1:], xerr=0.5,
@@ -1207,7 +1002,7 @@ class BurstFile(VeritasFile):
         # plot residual
         residual_dict = self.get_residual_hist()
 
-        if self.avg_bkg_hist.keys() != self.sig_burst_hist.keys():
+        if self.avg_bkg_hist.keys() != self.signal_burst_hist.keys():
             print("Check residual error calc")
         res_err = np.sqrt(sig_err ** 2 + bkg_err ** 2)
 
@@ -1228,6 +1023,16 @@ class BurstFile(VeritasFile):
             plt.show()
 
     def plot_theta2(self, theta2s=np.arange(0, 2, 0.01), psf_width=0.1, N=100, const=1, ax=None, ylog=True):
+        '''
+
+        :param theta2s:
+        :param psf_width:
+        :param N:
+        :param const:
+        :param ax:
+        :param ylog:
+        :return:
+        '''
         const_ = np.ones(theta2s.shape[0]) * const
         if ax is None:
             fig = plt.figure()
@@ -1244,6 +1049,26 @@ class BurstFile(VeritasFile):
     def plot_skymap(self, coords, Es, ELs, ax=None, color='r', fov_center=None, fov=1.75, fov_color='gray',
                     cent_coords=None, cent_marker='+', cent_ms=1.8, cent_mew=4.0, cent_radius=0.01, cent_color='b',
                     label=None, projection=None):
+        '''
+
+        :param coords:
+        :param Es:
+        :param ELs:
+        :param ax:
+        :param color:
+        :param fov_center:
+        :param fov:
+        :param fov_color:
+        :param cent_coords:
+        :param cent_marker:
+        :param cent_ms:
+        :param cent_mew:
+        :param cent_radius:
+        :param cent_color:
+        :param label:
+        :param projection:
+        :return:
+        '''
         if ax is None:
             fig = plt.figure(figsize=(5, 5))
             if projection is not None:

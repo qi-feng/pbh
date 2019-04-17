@@ -17,12 +17,8 @@ except:
 
 class VeritasFile(object):
     def __init__(self, run_number, data_dir,  using_ed=True, num_ev_to_read=None, debug = False):
-        self.logger = logging.getLogger(__name__)
-
-        if debug:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            logging.basicConfig(level=logging.INFO)
+        # TODO: Barycentering - currently not being applied
+        self.initiate_logger(debug)
 
         self.run_number = int(run_number)
         self.data_dir = data_dir
@@ -65,10 +61,24 @@ class VeritasFile(object):
         # psfs - not filled here
         # burst_sizes - not filled here
         # fail_cut - not filled here
-        self.columns = ['MJDs', 'ts', 'RAs', 'Decs', 'Es', 'ELs', 'psfs', 'burst_sizes', 'fail_cut']
+        self.columns = ['EvNum', 'MJDs', 'ts', 'RAs', 'Decs', 'Es', 'ELs', 'psfs', 'burst_sizes']
 
         # number of events to read (for faster debugging)
         self.num_ev_to_read = num_ev_to_read
+
+    def initiate_logger(self, debug=False):
+        '''
+        When loading from pickle the logger needs to be reinitialized
+        :param debug:
+        :return:
+        '''
+        self.logger = logging.getLogger(__name__)
+
+        if debug:
+            logging.basicConfig(filename="log.txt", filemode="w", level=logging.DEBUG)
+        else:
+            logging.basicConfig(level=logging.INFO)
+
 
     def set_cuts(self, cuts="soft", energy_cut_low = 0.08*u.TeV, energy_cut_high = 50*u.TeV, elevation_cut_low = 50, distance_upper_cut = 1.45):
         '''
@@ -150,15 +160,20 @@ class VeritasFile(object):
             self.N_all_events = all_gamma_tree.GetEntries()
 
         # create dataframe
-        self.df_ = pd.DataFrame(np.array([np.zeros(self.N_all_events)] * len(self.columns)).T,
-                                columns=self.columns)
 
         # note we want to record all of the event times and the number of gamma events
         self.all_times = np.zeros(self.N_all_events)
         self.N_gamma_events = 0
 
+        # produce a list of events and then turn that into the dataframe
+        events_list = []
+
         # perform main loop to fill tree
         for i, event in enumerate(all_gamma_tree):
+            self.logger.debug(i)
+            if i >= self.N_all_events:
+                break
+
             self.all_times[i] = event.timeOfDay
             distance = np.sqrt(event.Xderot * event.Xderot + event.Yderot * event.Yderot)
 
@@ -166,17 +181,23 @@ class VeritasFile(object):
             if (event.Energy < self.energy_low_cut) or (event.Energy > self.energy_high_cut) or (
                     event.TelElevation < self.elevation_low_cut) or (
                     event.IsGamma == 0) or (distance > self.distance_upper_cut):
-                self.df_.fail_cut.at[i] = 1
+                pass
             else:
                 self.N_gamma_events += 1
-                # fill the pandas dataframe
-                self.df_.MJDs[i] = event.dayMJD
-                # df_.eventNumber[i] = event.eventNumber
-                self.df_.ts[i] = event.timeOfDay
-                self.df_.RAs[i] = event.GammaRA
-                self.df_.Decs[i] = event.GammaDEC
-                self.df_.Es[i] = event.Energy
-                self.df_.ELs[i] = event.TelElevation
+
+                # fill the event list
+                events_list.append([event.eventNumber, event.dayMJD, event.timeOfDay, event.GammaRA,
+                               event.GammaDEC, event.Energy, event.TelElevation, 0., 1])
+                # self.df_.MJDs[i] = event.dayMJD
+                # # df_.eventNumber[i] = event.eventNumber
+                # self.df_.ts[i] = event.timeOfDay
+                # self.df_.RAs[i] = event.GammaRA
+                # self.df_.Decs[i] = event.GammaDEC
+                # self.df_.Es[i] = event.Energy
+                # self.df_.ELs[i] = event.TelElevation
+
+        self.photon_df = pd.DataFrame(events_list, columns=self.columns)
+
 
     def _load_gamma_tree_vegas(self):
         '''
@@ -195,13 +216,12 @@ class VeritasFile(object):
         else:
             self.N_all_events = event_tree.GetEntries()
 
-        # create dataframe
-        self.df_ = pd.DataFrame(np.array([np.zeros(self.N_all_events)] * len(self.columns)).T,
-                                columns=self.columns)
-
         # note we want to record all of the event times and the number of gamma events
         self.all_times = np.zeros(self.N_all_events)
         self.N_gamma_events = 0
+
+        # produce a list of events and then turn that into the dataframe
+        events_list = []
 
         # perform main loop to fill tree
         for i, event in enumerate(event_tree):
@@ -219,7 +239,8 @@ class VeritasFile(object):
                 is_gamma = ((event.S.fMSW > self.MSW_lower) and (event.S.fMSW < self.MSW_upper) and
                             (event.S.fMSL > self.MSL_lower) and (event.S.fMSW < self.MSL_upper) and
                             (event.S.fShowerMaxHeight_KM > self.max_height_lower))
-                self.logger.debug("{0:0.2f} {1:0.2f} {2:0.2f} {3:s}".format(event.S.fMSW, event.S.fMSL, event.S.fShowerMaxHeight_KM, str(is_gamma)))
+                self.logger.debug("{0:0.2f} {1:0.2f} {2:0.2f} {3:s}".format(event.S.fMSW, event.S.fMSL,
+                                                                            event.S.fShowerMaxHeight_KM, str(is_gamma)))
             else:
                 is_gamma = True
 
@@ -227,16 +248,22 @@ class VeritasFile(object):
             if (event.S.fEnergy_GeV*u.GeV < self.energy_low_cut) or (event.S.fEnergy_GeV*u.GeV > self.energy_high_cut) or (
                     event.S.fArrayTrackingElevation_Deg < self.elevation_low_cut) or (
                     distance > self.distance_upper_cut) or (not is_gamma):
-                self.df_.fail_cut.at[i] = 1
+                pass
             else:
                 self.N_gamma_events += 1
                 # fill the pandas dataframe
-                self.df_.MJDs[i] = event.S.fTime.getMJDInt()
-                self.df_.ts[i] = self.all_times[i]
-                self.df_.RAs[i] = np.rad2deg(event.S.fDirectionRA_J2000_Rad)
-                self.df_.Decs[i] = np.rad2deg(event.S.fDirectionDec_J2000_Rad)
-                self.df_.Es[i] = event.S.fEnergy_GeV / 1000. # to TeV
-                self.df_.ELs[i] = event.S.fArrayTrackingElevation_Deg
+                # fill the event list
+                events_list.append([event.S.fArrayEventNum, event.S.fTime.getMJDInt(), self.all_times[i],
+                               np.rad2deg(event.S.fDirectionRA_J2000_Rad),
+                               np.rad2deg(event.S.fDirectionDec_J2000_Rad), event.S.fEnergy_GeV / 1000.,
+                               event.S.fArrayTrackingElevation_Deg, 0., 1])
+                # self.df_.MJDs[i] = event.S.fTime.getMJDInt()
+                # self.df_.ts[i] = self.all_times[i]
+                # self.df_.RAs[i] = np.rad2deg(event.S.fDirectionRA_J2000_Rad)
+                # self.df_.Decs[i] = np.rad2deg(event.S.fDirectionDec_J2000_Rad)
+                # self.df_.Es[i] = event.S.fEnergy_GeV / 1000. # to TeV
+                # self.df_.ELs[i] = event.S.fArrayTrackingElevation_Deg
+        self.photon_df = pd.DataFrame(events_list, columns=self.columns)
 
 
     def load_gamma_tree(self):

@@ -39,8 +39,8 @@ def sim_psf_likelihood(Nsim=1000, N_burst=3, filename=None,
             rand_bkg_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_bkg_theta)
             rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
-        cent_bkg, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
-        cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
+        cent_bkg, ll_bkg = pbh.find_optimum_centroid(rand_bkg_coords, psfs)
+        cent_sig, ll_sig = pbh.find_optimum_centroid(rand_sig_coords, psfs)
         ll_bkg_all[j] = ll_bkg
         ll_sig_all[j] = ll_sig
     return ll_sig_all, ll_bkg_all
@@ -78,14 +78,14 @@ def sim_psf_likelihood_scramble_data(Nsim=1000, N_burst=3,
         rand_sig_coords = np.zeros((N_burst, 2))
         psfs = this_slice.psfs.values
 
-        fov_center, ll_bkg = pbh.minimize_centroid_ll(rand_bkg_coords, psfs)
+        fov_center, ll_bkg = pbh.find_optimum_centroid(rand_bkg_coords, psfs)
 
         for i in range(N_burst):
             psf_width = psfs[i]
             rand_sig_theta = pbh.gen_one_random_theta(psf_width, prob="psf", fov=fov)
             rand_sig_coords[i, :] = pbh.gen_one_random_coords(fov_center, rand_sig_theta)
 
-        cent_sig, ll_sig = pbh.minimize_centroid_ll(rand_sig_coords, psfs)
+        cent_sig, ll_sig = pbh.find_optimum_centroid(rand_sig_coords, psfs)
         ll_bkg_all[j] = ll_bkg
         ll_sig_all[j] = ll_sig
     return ll_sig_all, ll_bkg_all

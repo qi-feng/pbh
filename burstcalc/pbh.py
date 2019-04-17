@@ -16,12 +16,54 @@ from main.io import *
 
 sys.setrecursionlimit(50000)
 
+def combine_pbhs_from_pickle_list(list_of_pbhs_pickle, outfile="pbhs_combined"):
+    '''
+    Read a list of pickle file names in a csv file and combine data if from same window size.
+    Also, save combined data to an output pickle file
+    :param list_of_pbhs_pickle: csv file with list of pickle file names
+    :param outfile: output file name
+    :return: combined picke file data
+    '''
+    list_df = pd.read_csv(list_of_pbhs_pickle, header=None)
+    list_df.columns = ["pickle_file"]
+    list_of_pbhs = list_df.pickle_file.values
+    first_pbh = load_pickle(list_of_pbhs[0])
+    window_size = first_pbh.window_size
+    pbhs_combined = PbhCombined(window_size)
+    pbhs_combined.rho_dots = first_pbh.rho_dots
+    for pbhs_pkl_ in list_of_pbhs:
+        pbhs_ = load_pickle(pbhs_pkl_)
+        assert window_size == pbhs_.window_size, "The input list contains pbhs objects with different window sizes!"
+        pbhs_combined.add_pbh(pbhs_)
+    dump_pickle(pbhs_combined, outfile + "_window" + str(window_size) + "-s_" + str(list_of_pbhs.shape[0]) + "runs.pkl")
+    return pbhs_combined
 
 
 
-class Pbh_combined(Burst):
+def combine_from_pickle_list(listname, window_size, filetag="", burst_size_threshold=2, rho_dots=None,
+                             upper_burst_size=None):
+    pbhs_combined_all_ = combine_pbhs_from_pickle_list(listname)
+    print("Total exposure time is %.2f hrs" % (pbhs_combined_all_.total_time_year * 365.25 * 24))
+    pbhs_combined_all_.get_upper_limits(burst_size_threshold=burst_size_threshold, rho_dots=rho_dots,
+                                        upper_burst_size=upper_burst_size)
+    print("The effective volume above burst size 2 is %.6f pc^3" % (pbhs_combined_all_.effective_volumes[2]))
+    print("There are %d runs in total" % (len(pbhs_combined_all_.run_numbers)))
+    total_N_runs = len(pbhs_combined_all_.run_numbers)
+    pbhs_combined_all_.plot_burst_hist(
+        filename="burst_hists_test_" + str(filetag) + "_window" + str(window_size) + "-s_all" + str(
+            total_N_runs) + "runs.png",
+        title="Burst histogram " + str(window_size) + "-s window " + str(total_N_runs) + " runs", plt_log=True,
+        error="Poisson")
+    pbhs_combined_all_.plot_ll_vs_rho_dots(
+        save_hist="ll_vs_rho_dots_test_" + str(filetag) + "_window" + str(window_size) + "-s_all" + str(
+            total_N_runs) + "runs")
+    return pbhs_combined_all_
+
+
+
+class PbhCombined(Burst):
     def __init__(self, window_size):
-        super(Pbh_combined, self).__init__()
+        super(PbhCombined, self).__init__()
         # the cut on -2lnL for rho_dot that gives an observed burst size
         # !!!note how this is different from the ll_cut on the centroid in the super class
         self.delta_ll_cut = 6.63
@@ -63,7 +105,7 @@ class Pbh_combined(Burst):
         self.rho_dot_ULs = {}
         self.burst_sizes_set = set()
         # analyze again:
-        if isinstance(orig_pbhs[0], Pbh_combined):
+        if isinstance(orig_pbhs[0], PbhCombined):
             for pbhs_ in orig_pbhs:
                 pbhs_.window_size = window_size
                 pbhs_.sig_burst_hist = {}
@@ -75,8 +117,8 @@ class Pbh_combined(Burst):
                 pbhs_.rho_dot_ULs = {}
                 pbhs_.burst_sizes_set = set()
                 for pbh_ in pbhs_.pbhs:
-                    _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size,
-                                                                             verbose=self.verbose)
+                    _sig_burst_hist, _sig_burst_dict = pbh_.signal_burst_search(window_size=self.window_size,
+                                                                                verbose=self.verbose)
                     pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                               rando_method=self.rando_method,
                                                                               method=self.bkg_method, copy=True,
@@ -87,8 +129,8 @@ class Pbh_combined(Burst):
                 self.do_step2345(pbhs_)
         else:
             for pbh_ in orig_pbhs:
-                _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size,
-                                                                         verbose=self.verbose)
+                _sig_burst_hist, _sig_burst_dict = pbh_.signal_burst_search(window_size=self.window_size,
+                                                                            verbose=self.verbose)
                 pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                           rando_method=self.rando_method,
                                                                           method=self.bkg_method, copy=True,
@@ -192,7 +234,7 @@ class Pbh_combined(Burst):
     def add_run(self, run_number):
         pbh_ = Pbh()
         pbh_.get_tree_with_all_gamma(run_number=run_number)
-        _sig_burst_hist, _sig_burst_dict = pbh_.sig_burst_search(window_size=self.window_size, verbose=self.verbose)
+        _sig_burst_hist, _sig_burst_dict = pbh_.signal_burst_search(window_size=self.window_size, verbose=self.verbose)
         pbh_.estimate_bkg_burst(window_size=self.window_size,
                                                                   rando_method=self.rando_method,
                                                                   method=self.bkg_method, copy=True,

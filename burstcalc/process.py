@@ -1,11 +1,11 @@
 import numpy as np
 
 from burstcalc.io import dump_pickle
-from burstcalc.pbh import Pbh_combined
+from burstcalc.pbh import PbhCombined
 
 
 def process_one_run(run, window_size, rho_dots=np.arange(0., 3.e5, 100), plot=False, bkg_method="scramble_times"):
-    pbhs = Pbh_combined(window_size)
+    pbhs = PbhCombined(window_size)
     pbhs.rho_dots = rho_dots
     pbhs.bkg_method = bkg_method
     try:
